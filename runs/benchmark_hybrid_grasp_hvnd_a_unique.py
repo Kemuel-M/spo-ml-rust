@@ -1,0 +1,173 @@
+import os
+import subprocess
+import time
+import csv
+import re
+
+# =============================================================================
+# CONFIGURAÇÕES EDITÁVEIS
+# =============================================================================
+
+# Dataset e Execução
+DATASET = "a"           # Opções: "a", "b", "x"
+SEED = "42"             # Semente aleatória (use "0" para semente do sistema)
+TIMEOUT_LIMIT = 600     # Tempo máximo por instância em segundos (Python)
+MAX_INSTANCES = 0       # Limite de instâncias a processar (0 para todas)
+
+# Parâmetros da Meta-heurística (GRASP)
+ITERATIONS = 1000       # Número de iterações do GRASP
+CONSTRUCTIVE = "hybrid" # Estratégia: static, adaptive, random, hybrid, aisle_adaptive
+LOCAL_SEARCH = "hvnd"   # Estratégia: none, hvnd, vnd, swap, insert, tabu, lahc
+
+# Caminhos de Arquivos
+BINARY_PATH = "./target/release/spo-ml-rust"
+BEST_VAL_PATH = "best_solutions/best_objectives.csv"
+CHECKER_PATH = "runs/checker.py"
+OUTPUT_DIR = "outputs"
+
+# =============================================================================
+# DERIVADOS (Não mexer a menos que saiba o que está fazendo)
+# =============================================================================
+
+STRATEGY = f"grasp:{ITERATIONS}+{CONSTRUCTIVE}+{LOCAL_SEARCH}"
+STRATEGY_DESC = f"GRASP-{ITERATIONS} ({CONSTRUCTIVE} + {LOCAL_SEARCH})"
+
+DATASETS_DIR = f"datasets/{DATASET}"
+OUTPUT_CSV = f"{OUTPUT_DIR}/benchmark_grasp_{LOCAL_SEARCH}_{DATASET}.csv"
+
+def load_best_values():
+    best_vals = {}
+    if os.path.exists(BEST_VAL_PATH):
+        with open(BEST_VAL_PATH, mode='r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Filtra pelo dataset atual para pegar os melhores conhecidos
+                if row['dataset'] == DATASET:
+                    key = row['instance']
+                    best_vals[key] = float(row['best_objective'])
+    return best_vals
+
+def validate_solution(input_path, output_path):
+    if not os.path.exists(output_path):
+        return False, 0.0, "MISSING_OUTPUT"
+    try:
+        cmd = ["python3", CHECKER_PATH, input_path, output_path]
+        process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        stdout = process.stdout
+        is_feasible = "Is solution feasible: True" in stdout
+        score = 0.0
+        if is_feasible:
+            match = re.search(r"Objective function value: ([\d\.]+)", stdout)
+            if match: score = float(match.group(1))
+            return True, score, "OK"
+        else:
+            return False, 0.0, "INFEASIBLE"
+    except Exception as e:
+        return False, 0.0, f"CHECKER_ERROR ({str(e)})"
+
+def run_benchmark():
+    if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
+    best_values = load_best_values()
+    
+    # Listar instâncias do diretório selecionado
+    if not os.path.exists(DATASETS_DIR):
+        print(f"Erro: Diretorio {DATASETS_DIR} nao encontrado.")
+        return
+
+    instances = sorted([f for f in os.listdir(DATASETS_DIR) if f.endswith(".txt")])
+    if MAX_INSTANCES > 0 and len(instances) > MAX_INSTANCES:
+        instances = instances[:MAX_INSTANCES]
+
+    print(f"Iniciando Benchmark [{DATASET.upper()}]: {STRATEGY_DESC}")
+    print(f"Estratégia: {STRATEGY}")
+    print(f"Instâncias: {len(instances)}")
+    print(f"Relatório: {OUTPUT_CSV}")
+    print("-" * 100)
+
+    # Header do CSV
+    fieldnames = ["instance", "strategy", "score", "best_known", "gap_percent", "time_seconds", "status"]
+    
+    with open(OUTPUT_CSV, mode='w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for inst_file in instances:
+            input_path = os.path.join(DATASETS_DIR, inst_file)
+            temp_output = os.path.join(OUTPUT_DIR, f"temp_bench_{DATASET}_{inst_file}")
+            best_known = best_values.get(inst_file, 0.0)
+            
+            print(f"Processando {inst_file}...", end=" ", flush=True)
+            
+            start_time = time.time()
+            try:
+                # Executar o solver
+                cmd = [BINARY_PATH, input_path, temp_output, STRATEGY, SEED]
+                process = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_LIMIT)
+                elapsed = time.time() - start_time
+                
+                if process.returncode != 0:
+                    print(f"FALHA (code {process.returncode})")
+                    writer.writerow({
+                        "instance": inst_file,
+                        "strategy": STRATEGY,
+                        "score": 0.0,
+                        "best_known": best_known,
+                        "gap_percent": 100.0,
+                        "time_seconds": elapsed,
+                        "status": f"ERROR_{process.returncode}"
+                    })
+                    continue
+
+                # Validar solução
+                is_feasible, score, status = validate_solution(input_path, temp_output)
+                
+                gap = 0.0
+                if best_known > 0:
+                    gap = ((best_known - score) / best_known) * 100.0
+                
+                print(f"Score: {score:.4f} | Best: {best_known:.4f} | Gap: {gap:.2f}% | Time: {elapsed:.2f}s")
+                
+                row = {
+                    "instance": inst_file,
+                    "strategy": STRATEGY,
+                    "score": score,
+                    "best_known": best_known,
+                    "gap_percent": gap,
+                    "time_seconds": elapsed,
+                    "status": status
+                }
+                writer.writerow(row)
+                csvfile.flush() # Salva no disco imediatamente
+                
+                # Remover arquivo temporário
+                if os.path.exists(temp_output):
+                    os.remove(temp_output)
+                    
+            except subprocess.TimeoutExpired:
+                print("TIMEOUT")
+                writer.writerow({
+                    "instance": inst_file,
+                    "strategy": STRATEGY,
+                    "score": 0.0,
+                    "best_known": best_known,
+                    "gap_percent": 100.0,
+                    "time_seconds": float(TIMEOUT_LIMIT),
+                    "status": "TIMEOUT"
+                })
+            except Exception as e:
+                print(f"ERRO: {str(e)}")
+                writer.writerow({
+                    "instance": inst_file,
+                    "strategy": STRATEGY,
+                    "score": 0.0,
+                    "best_known": best_known,
+                    "gap_percent": 100.0,
+                    "time_seconds": 0.0,
+                    "status": f"EXCEPTION_{type(e).__name__}"
+                })
+
+    print("-" * 100)
+    print(f"Benchmark concluído. Resultados salvos em {OUTPUT_CSV}")
+
+if __name__ == "__main__":
+    run_benchmark()
