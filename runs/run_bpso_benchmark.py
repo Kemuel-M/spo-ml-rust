@@ -106,7 +106,7 @@ def main():
         fieldnames = [
             'instance', 'dimension', 'heuristic', 'ls_method', 'move_operator', 
             'acceptance_policy', 'found_value', 'best_known_value', 
-            'time_seconds', 'status'
+            'time_seconds', 'total_iterations', 'status'
         ]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -142,10 +142,14 @@ def main():
                         )
                         duration = time.time() - start_time
                         
+                        # Extract total iterations
+                        iter_match = re.search(r"\[BPSO\] Finished in (\d+) iterations", proc.stdout)
+                        total_iters = iter_match.group(1) if iter_match else ""
+
                         if proc.returncode == 0:
                             is_feasible, score = validate_with_checker(input_path, temp_output_file)
                             if is_feasible:
-                                print(f" Done. Score: {score:.4f}, Time: {duration:.2f}s")
+                                print(f" Done. Score: {score:.4f}, Iters: {total_iters}, Time: {duration:.2f}s")
                                 writer.writerow({
                                     'instance': f"{dataset}/{filename}",
                                     'dimension': dim,
@@ -156,6 +160,7 @@ def main():
                                     'found_value': f"{score:.4f}",
                                     'best_known_value': best_known,
                                     'time_seconds': f"{duration:.4f}",
+                                    'total_iterations': total_iters,
                                     'status': "OK"
                                 })
                             else:
@@ -166,6 +171,7 @@ def main():
                                     'heuristic': meta.upper(),
                                     'ls_method': method,
                                     'found_value': "",
+                                    'total_iterations': total_iters,
                                     'status': "INFEASIBLE"
                                 })
                         else:

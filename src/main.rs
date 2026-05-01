@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::env;
-use spo_ml_rust::solver::{ChallengeSolver, MetaheuristicType, ConstructiveType, LocalSearchType};
+use spo_ml_rust::solver::{ChallengeSolver, MetaheuristicType, ConstructiveType, LocalSearchType, BpsoDimension};
 use spo_ml_rust::local_searchs::{SearchStrategy, NeighborhoodType};
 use spo_ml_rust::io;
 
@@ -100,8 +100,12 @@ fn parse_strategy(config_str: &str, defaults: &spo_ml_rust::solver::SolverConfig
                 generations: m_val.map(|v| v as usize).unwrap_or(defaults.meta.ga.generations) 
             }
         },
-        "bpso" | "a_bpso" => {
-            let dim = if m_name.starts_with('a') { SearchDimension::Aisles } else { SearchDimension::Orders };
+        "bpso" | "a_bpso" | "h_bpso" => {
+            let dim = match m_name {
+                "a_bpso" => BpsoDimension::Aisles,
+                "h_bpso" => BpsoDimension::Hybrid,
+                _ => BpsoDimension::Orders,
+            };
             MetaheuristicType::Bpso { 
                 dimension: dim, 
                 pop_size: defaults.meta.bpso.pop_size, 

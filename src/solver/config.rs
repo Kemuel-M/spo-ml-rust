@@ -149,19 +149,37 @@ pub struct BpsoConfig {
     pub c2: f64,
     pub v_max: f64,
     pub max_time_secs: u64,
+    pub stagnation_limit: usize,
+    pub p_orders: f64,
+    pub ls_prob: f64,
+    pub turbulence_base: f64,
+    pub turbulence_high: f64,
+    pub score_threshold_orders: f64,
+    pub score_threshold_aisles: f64,
+    pub log_frequency: usize,
 }
 
 impl Default for BpsoConfig {
     fn default() -> Self {
         Self {
-            pop_size: 50,
+            pop_size: 100,//50,
             iterations: 100,
             w_min: 0.4,
             w_max: 0.9,
             c1: 1.494,
             c2: 1.494,
+            //c1: 2.0,
+            //c2: 1.0,
             v_max: 4.0,
             max_time_secs: 150,
+            stagnation_limit: 100,
+            p_orders: 0.5,
+            ls_prob: 0.15,
+            turbulence_base: 0.05,
+            turbulence_high: 0.20,
+            score_threshold_orders: 0.5,
+            score_threshold_aisles: 0.2,
+            log_frequency: 10,
         }
     }
 }
@@ -256,5 +274,12 @@ pub enum MetaheuristicType {
     Ils { dimension: SearchDimension, iterations: usize },
     SimulatedAnnealing { dimension: SearchDimension, t0: f64, cooling: f64 },
     GeneticAlgorithm { dimension: SearchDimension, pop_size: usize, generations: usize },
-    Bpso { dimension: SearchDimension, pop_size: usize, iterations: usize },
+    Bpso { dimension: BpsoDimension, pop_size: usize, iterations: usize },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BpsoDimension {
+    Orders,
+    Aisles,
+    Hybrid,
 }

@@ -6,7 +6,7 @@ use crate::evaluator::Evaluator;
 pub mod config;
 pub mod simple_solver;
 
-pub use config::{SolverConfig, MetaheuristicType, ConstructiveType, LocalSearchType, GraspConfig};
+pub use config::{SolverConfig, MetaheuristicType, ConstructiveType, LocalSearchType, GraspConfig, BpsoDimension};
 pub use simple_solver::SimpleSolver;
 
 // --- Challenge Solver ---
@@ -148,7 +148,16 @@ impl<'a> ChallengeSolver<'a> {
                     dimension, population_size: pop_size, iterations: iterations,
                     w_min: self.config.meta.bpso.w_min, w_max: self.config.meta.bpso.w_max,
                     c1: self.config.meta.bpso.c1, c2: self.config.meta.bpso.c2,
-                    v_max: self.config.meta.bpso.v_max, ls_prob: 0.15, max_time_secs: self.config.meta.bpso.max_time_secs,
+                    v_max: self.config.meta.bpso.v_max, 
+                    ls_prob: self.config.meta.bpso.ls_prob, 
+                    max_time_secs: self.config.meta.bpso.max_time_secs,
+                    stagnation_limit: self.config.meta.bpso.stagnation_limit,
+                    p_orders: self.config.meta.bpso.p_orders,
+                    turbulence_base: self.config.meta.bpso.turbulence_base,
+                    turbulence_high: self.config.meta.bpso.turbulence_high,
+                    score_threshold_orders: self.config.meta.bpso.score_threshold_orders,
+                    score_threshold_aisles: self.config.meta.bpso.score_threshold_aisles,
+                    log_frequency: self.config.meta.bpso.log_frequency,
                 },
             })
         };
