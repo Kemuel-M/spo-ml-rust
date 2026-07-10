@@ -17,8 +17,7 @@ pub struct ChallengeSolver<'a> {
 }
 
 impl<'a> ChallengeSolver<'a> {
-    pub fn new(data: &'a ProblemData) -> Self {
-        let mut config = SolverConfig::default();
+    pub fn new(data: &'a ProblemData, mut config: SolverConfig) -> Self {
         config.adjust_for_data(data);
         Self {
             data,
@@ -57,13 +56,14 @@ impl<'a> ChallengeSolver<'a> {
         }
 
         let raw_constructive: Box<dyn ConstructiveAlgorithm> = match constr_type {
-            ConstructiveType::Static => Box::new(crate::heuristics::static_greedy::StaticGreedy),
-            ConstructiveType::Adaptive => Box::new(crate::heuristics::adaptive_greedy::AdaptiveGreedy),
-            ConstructiveType::Random => Box::new(crate::heuristics::random_greedy::RandomGreedy { alpha: 0.1 }), // Alpha default, será sobrescrito pelo GRASP
+            ConstructiveType::OrderStatic => Box::new(crate::heuristics::static_greedy::StaticGreedy),
+            ConstructiveType::OrderAdaptive => Box::new(crate::heuristics::adaptive_greedy::AdaptiveGreedy),
+            ConstructiveType::OrderRandom => Box::new(crate::heuristics::random_greedy::RandomGreedy { alpha: 0.1 }), // Alpha default, será sobrescrito pelo GRASP
             ConstructiveType::AisleStatic => Box::new(crate::heuristics::aisle_centric_static::AisleCentricStatic),
             ConstructiveType::AisleAdaptive => Box::new(crate::heuristics::aisle_centric_adaptive::AisleCentricAdaptive),
             ConstructiveType::AisleRandom => Box::new(crate::heuristics::aisle_centric_random::AisleCentricRandom { alpha: 0.1 }),
             ConstructiveType::Hybrid => Box::new(crate::heuristics::hybrid_random::HybridRandom::new(0.1)),
+            ConstructiveType::SuperHybrid => Box::new(crate::heuristics::super_hybrid::SuperHybrid::new()),
         };
 
         let raw_local_search: Box<dyn LocalSearchAlgorithm> = match ls_type {
@@ -72,16 +72,28 @@ impl<'a> ChallengeSolver<'a> {
                 current_ls_config.dimension = dimension;
                 current_ls_config.strategy = strategy;
                 current_ls_config.neighborhood = neighborhood;
-                Box::new(ConfigurableLocalSearch { config: current_ls_config })
+                Box::new(ConfigurableLocalSearch { 
+                    config: current_ls_config,
+                    neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, neighborhood),
+                })
             },
             LocalSearchType::Vnd { dimension } => {
                 let mut v_config = current_ls_config.clone();
                 v_config.dimension = dimension;
                 Box::new(crate::local_searchs::vnd::VariableNeighborhoodDescent {
                     neighborhoods: vec![
-                        ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..v_config.clone() } },
-                        ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..v_config.clone() } },
-                        ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..v_config.clone() } },
+                        ConfigurableLocalSearch { 
+                            config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..v_config.clone() },
+                            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Insertion),
+                        },
+                        ConfigurableLocalSearch { 
+                            config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..v_config.clone() },
+                            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Swap),
+                        },
+                        ConfigurableLocalSearch { 
+                            config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..v_config.clone() },
+                            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Removal),
+                        },
                     ],
                     max_time_secs: v_config.max_time_secs,
                 })
@@ -89,10 +101,22 @@ impl<'a> ChallengeSolver<'a> {
             LocalSearchType::HVnd => {
                 Box::new(crate::local_searchs::hybrid_vnd::HybridVND {
                     neighborhoods: vec![
-                        ConfigurableLocalSearch { config: LocalSearchConfig { dimension: SearchDimension::Orders, neighborhood: NeighborhoodType::Insertion, ..current_ls_config.clone() } },
-                        ConfigurableLocalSearch { config: LocalSearchConfig { dimension: SearchDimension::Orders, neighborhood: NeighborhoodType::Swap, ..current_ls_config.clone() } },
-                        ConfigurableLocalSearch { config: LocalSearchConfig { dimension: SearchDimension::Aisles, neighborhood: NeighborhoodType::Removal, ..current_ls_config.clone() } },
-                        ConfigurableLocalSearch { config: LocalSearchConfig { dimension: SearchDimension::Aisles, neighborhood: NeighborhoodType::Swap, ..current_ls_config.clone() } },
+                        ConfigurableLocalSearch { 
+                            config: LocalSearchConfig { dimension: SearchDimension::Orders, neighborhood: NeighborhoodType::Insertion, ..current_ls_config.clone() },
+                            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion),
+                        },
+                        ConfigurableLocalSearch { 
+                            config: LocalSearchConfig { dimension: SearchDimension::Orders, neighborhood: NeighborhoodType::Swap, ..current_ls_config.clone() },
+                            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap),
+                        },
+                        ConfigurableLocalSearch { 
+                            config: LocalSearchConfig { dimension: SearchDimension::Aisles, neighborhood: NeighborhoodType::Removal, ..current_ls_config.clone() },
+                            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal),
+                        },
+                        ConfigurableLocalSearch { 
+                            config: LocalSearchConfig { dimension: SearchDimension::Aisles, neighborhood: NeighborhoodType::Swap, ..current_ls_config.clone() },
+                            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap),
+                        },
                     ],
                     max_time_secs: current_ls_config.max_time_secs,
                 })
@@ -101,13 +125,29 @@ impl<'a> ChallengeSolver<'a> {
                 let mut t_config = current_ls_config.clone();
                 t_config.dimension = dimension;
                 t_config.max_iterations = iterations;
-                Box::new(crate::local_searchs::tabu_search::TabuSearch { config: t_config, tenure })
+                Box::new(crate::local_searchs::tabu_search::TabuSearch { 
+                    config: t_config, 
+                    tenure,
+                    neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Swap),
+                })
             },
             LocalSearchType::LateAcceptance { dimension, list_size, iterations } => {
                 let mut l_config = current_ls_config.clone();
                 l_config.dimension = dimension;
                 l_config.max_iterations = iterations;
-                Box::new(crate::local_searchs::late_acceptance::LateAcceptanceHillClimbing { config: l_config, list_size })
+                Box::new(crate::local_searchs::late_acceptance::LateAcceptanceHillClimbing { 
+                    config: l_config, 
+                    list_size,
+                    neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Swap),
+                })
+            },
+            LocalSearchType::HLahc { list_size, iterations } => {
+                let mut l_config = current_ls_config.clone();
+                l_config.max_iterations = iterations;
+                Box::new(crate::local_searchs::hybrid_lahc::HybridLAHC::new(l_config, list_size))
+            },
+            LocalSearchType::HHc => {
+                Box::new(crate::local_searchs::hybrid_hill_climbing::HybridHillClimbing::new(current_ls_config.clone()))
             },
         };
 
@@ -143,23 +183,33 @@ impl<'a> ChallengeSolver<'a> {
                     max_time_secs: self.config.meta.ga.max_time_secs, memetic_prob: 0.2, repair_search_limit: 1000, seed: 42, 
                 },
             }),
-            MetaheuristicType::Bpso { dimension, pop_size, iterations } => Box::new(crate::metaheuristics::bpso::BPSO {
-                constructive, local_search, config: crate::metaheuristics::bpso::BPSOConfig {
+            MetaheuristicType::Bpso { dimension, pop_size, iterations } => {
+                let b_config = crate::metaheuristics::bpso::BPSOConfig {
                     dimension, population_size: pop_size, iterations: iterations,
                     w_min: self.config.meta.bpso.w_min, w_max: self.config.meta.bpso.w_max,
                     c1: self.config.meta.bpso.c1, c2: self.config.meta.bpso.c2,
+                    c1_escape: self.config.meta.bpso.c1_escape, c2_escape: self.config.meta.bpso.c2_escape,
                     v_max: self.config.meta.bpso.v_max, 
                     ls_prob: self.config.meta.bpso.ls_prob, 
+                    ls_prob_high: self.config.meta.bpso.ls_prob_high,
                     max_time_secs: self.config.meta.bpso.max_time_secs,
                     stagnation_limit: self.config.meta.bpso.stagnation_limit,
+                    stag_threshold_escape: self.config.meta.bpso.stag_threshold_escape,
+                    stag_threshold_panic: self.config.meta.bpso.stag_threshold_panic,
                     p_orders: self.config.meta.bpso.p_orders,
                     turbulence_base: self.config.meta.bpso.turbulence_base,
                     turbulence_high: self.config.meta.bpso.turbulence_high,
                     score_threshold_orders: self.config.meta.bpso.score_threshold_orders,
                     score_threshold_aisles: self.config.meta.bpso.score_threshold_aisles,
                     log_frequency: self.config.meta.bpso.log_frequency,
-                },
-            })
+                };
+                
+                // Override time if provided in the defaults (which we will pass from main)
+                // Actually, let's just make it simpler: read m_val3 in main and set it in the config object before calling build.
+                Box::new(crate::metaheuristics::bpso::BPSO {
+                    constructive, local_search, config: b_config
+                })
+            }
         };
 
         Box::new(TimedSolver::new(strategy))

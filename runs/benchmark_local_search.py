@@ -4,25 +4,44 @@ import time
 import csv
 import re
 
-# Configurações
+# ==========================================
+# CONFIGURAÇÕES DO BENCHMARK
+# ==========================================
 BINARY_PATH = "./target/release/spo-ml-rust"
 DATASETS_DIR = "datasets"
 BEST_VAL_PATH = "best_solutions/best_objectives.csv"
 OUTPUT_CSV = "outputs/benchmark_local_search_report.csv"
 TEMP_OUTPUT = "outputs/temp_ls_sol.txt"
 
-# Definidos com base no benchmark anterior
-BEST_CONSTR = "aisle_adaptive"
-WORST_CONSTR = "static"
+# Datasets a serem processados (ex: ['a', 'b', 'x'])
+DATASETS = ['a', 'b', 'x']
 
+# Construtivos Base para Inicializar a Busca Local
+# Usamos o 'oa' (Order Adaptive) por padrão, pois é o mediano perfeito
+CONSTRUCTIVES = ["oa", "aa"]
+
+# Estratégias de Busca Local para Avaliar
+# A string 'none' é usada como baseline (apenas o resultado do construtivo puro)
 LOCAL_SEARCHES = [
-    "none",
-    "swap", "a_swap",
-    "vnd", "a_vnd",
-    "hvnd",
-    "tabu", "a_tabu",
-    "lahc", "a_lahc"
+    "swap",
+    "a_swap",
+    "tabu",
+    "a_tabu",
+    "lahc",
+    "a_lahc",
+    "vnd",
+    "a_vnd",
+    "hvnd"
 ]
+
+
+# Semente fixa para reprodutibilidade dos benchmarks determinísticos
+# Se for "0", usará semente do sistema (aleatória)
+SEED = "42"
+
+# Quantidade de vezes que cada instância será executada (útil se construtivo ou LS for estocástico)
+RUNS_PER_INSTANCE = 10
+# ==========================================
 
 def load_best_values():
     best_vals = {}
@@ -48,96 +67,103 @@ def run_benchmark():
     best_values = load_best_values()
     results = []
 
-    # Localizar todas as instâncias nos subdiretórios a
+    # Localizar todas as instâncias nos subdiretórios configurados
     instances = []
-    for ds in ['a']:
+    for ds in DATASETS:
         ds_path = os.path.join(DATASETS_DIR, ds)
         if os.path.exists(ds_path):
             for file in sorted(os.listdir(ds_path)):
                 if file.endswith(".txt"):
                     instances.append((ds, file))
 
-    print(f"Iniciando benchmark de {len(LOCAL_SEARCHES)} buscas locais...")
-    print(f"Usando Construtivas: {BEST_CONSTR} (Melhor) e {WORST_CONSTR} (Pior)")
+    total_runs = len(instances) * len(CONSTRUCTIVES) * len(LOCAL_SEARCHES) * RUNS_PER_INSTANCE
+    print(f"Iniciando benchmark de Buscas Locais...")
+    print(f"Total de execuções planejadas: {total_runs}")
     print(f"O relatório será salvo em: {OUTPUT_CSV}")
-    print("-" * 120)
+    print("-" * 140)
 
     for ds, inst_file in instances:
         instance_key = f"{ds}/{inst_file}"
         input_path = os.path.join(DATASETS_DIR, ds, inst_file)
         best_known = best_values.get(instance_key, 0.0)
 
-        for constr in [BEST_CONSTR, WORST_CONSTR]:
-            constr_label = "BEST" if constr == BEST_CONSTR else "WORST"
-            
+        for constr in CONSTRUCTIVES:
             for ls in LOCAL_SEARCHES:
+                # Modificador para chamar a busca local de "tiro unico" (apenas 1 vez após construção)
                 strategy = f"single+{constr}+{ls}"
-                cmd = [BINARY_PATH, input_path, TEMP_OUTPUT, strategy, "42"]
                 
-                start_time = time.time()
-                try:
-                    process = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-                    duration = time.time() - start_time
-                    stdout = process.stdout
+                for run_idx in range(1, RUNS_PER_INSTANCE + 1):
+                    current_seed = str(int(SEED) + run_idx) if SEED != "0" else "0"
+                    cmd = [BINARY_PATH, input_path, TEMP_OUTPUT, strategy, current_seed]
                     
-                    initial_score = 0.0
-                    final_score = 0.0
-                    status = "OK"
-                    improved = "false"
-                    
-                    if process.returncode == 0:
-                        initial_score = get_score_from_output(stdout, "Initial Score")
-                        final_score = get_score_from_output(stdout, "Final Score")
+                    start_time = time.time()
+                    try:
+                        process = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                        duration = time.time() - start_time
+                        stdout = process.stdout
                         
-                        if "Improved: true" in stdout:
-                            improved = "true"
-                        elif "Solution NOT Feasible!" in stdout:
-                            status = "INFEASIBLE"
-                    else:
-                        status = f"CRASH ({process.returncode})"
+                        initial_score = 0.0
+                        final_score = 0.0
+                        status = "OK"
+                        
+                        if process.returncode == 0:
+                            initial_score = get_score_from_output(stdout, "Initial Score")
+                            final_score = get_score_from_output(stdout, "Final Score")
+                            
+                            if "Solution NOT Feasible!" in stdout:
+                                status = "INFEASIBLE"
+                                
+                            # Tratamento para caso a busca local seja None, o inicial é igual ao final
+                            if initial_score == 0.0 and final_score > 0.0:
+                                initial_score = final_score
+                        else:
+                            status = f"CRASH ({process.returncode})"
 
-                    gap = 0.0
-                    if best_known > 0:
-                        gap = ((best_known - final_score) / best_known) * 100
+                        gap = 0.0
+                        if best_known > 0 and final_score > 0:
+                            gap = ((best_known - final_score) / best_known) * 100
 
-                    diff = final_score - initial_score
-                    
-                    results.append({
-                        "dataset": ds,
-                        "instance": inst_file,
-                        "constructive": constr,
-                        "constr_quality": constr_label,
-                        "local_search": ls,
-                        "initial_score": f"{initial_score:.4f}",
-                        "final_score": f"{final_score:.4f}",
-                        "improvement": f"{diff:.4f}",
-                        "best_known": f"{best_known:.4f}",
-                        "gap_percent": f"{gap:.2f}%",
-                        "improved": improved,
-                        "time_seconds": f"{duration:.4f}",
-                        "status": status
-                    })
-                    
-                    improved_flag = "[*]" if improved == "true" else "[ ]"
-                    print(f"[{status}] {inst_file.ljust(18)} | {constr_label.ljust(5)} + {ls.ljust(6)} {improved_flag} | Initial: {initial_score:>8.2f} | Final: {final_score:>8.2f} | Gain: {diff:>7.2f} | Gap: {gap:>6.2f}% | Time: {duration:.3f}s")
+                        # Diferença direta em pontos absolutos (initial - final, pois queremos maximizar ou...
+                        # O score é Itens/Corredor (maior é melhor), então ganho = final - initial
+                        gain = final_score - initial_score
+                        improved = "true" if gain > 0.0001 else "false"
+                        
+                        results.append({
+                            "dataset": ds,
+                            "instance": inst_file,
+                            "run": run_idx,
+                            "constructive": constr,
+                            "local_search": ls,
+                            "initial_score": f"{initial_score:.4f}",
+                            "final_score": f"{final_score:.4f}",
+                            "gain_score": f"{gain:.4f}",
+                            "best_known": f"{best_known:.4f}",
+                            "gap_percent": f"{gap:.2f}%",
+                            "improved": improved,
+                            "time_seconds": f"{duration:.4f}",
+                            "status": status
+                        })
+                        
+                        improved_flag = "[+]" if improved == "true" else "[ ]"
+                        print(f"[{status}] {inst_file.ljust(18)} | {constr.ljust(5)} + {ls.ljust(6)} | Run: {run_idx:02d} {improved_flag} | Initial: {initial_score:>8.2f} | Final: {final_score:>8.2f} | Gain: {gain:>7.2f} | Gap: {gap:>6.2f}% | Time: {duration:.3f}s")
 
-                except subprocess.TimeoutExpired:
-                    print(f"[TIMEOUT] {inst_file.ljust(18)} | {constr_label.ljust(5)} + {ls.ljust(6)}")
-                    results.append({
-                        "dataset": ds, "instance": inst_file, "constructive": constr, "constr_quality": constr_label,
-                        "local_search": ls, "initial_score": "0.0", "final_score": "0.0", 
-                        "improvement": "0.0", "best_known": f"{best_known:.4f}",
-                        "gap_percent": "100%", "improved": "N/A", "time_seconds": "120.0", "status": "TIMEOUT"
-                    })
+                    except subprocess.TimeoutExpired:
+                        print(f"[TIMEOUT] {inst_file.ljust(18)} | {constr.ljust(5)} + {ls.ljust(6)} | Run: {run_idx:02d}")
+                        results.append({
+                            "dataset": ds, "instance": inst_file, "run": run_idx, "constructive": constr,
+                            "local_search": ls, "initial_score": "0.0", "final_score": "0.0", 
+                            "gain_score": "0.0", "best_known": f"{best_known:.4f}",
+                            "gap_percent": "100%", "improved": "N/A", "time_seconds": "120.0", "status": "TIMEOUT"
+                        })
 
     # Salvar resultados no CSV
     with open(OUTPUT_CSV, mode='w', newline='') as f:
-        fieldnames = ["dataset", "instance", "constructive", "constr_quality", "local_search", "initial_score", "final_score", "improvement", "best_known", "gap_percent", "improved", "time_seconds", "status"]
+        fieldnames = ["dataset", "instance", "run", "constructive", "local_search", "initial_score", "final_score", "gain_score", "best_known", "gap_percent", "improved", "time_seconds", "status"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
 
-    print("-" * 120)
+    print("-" * 140)
     print(f"Benchmark concluído! CSV gerado em {OUTPUT_CSV}")
 
 if __name__ == "__main__":

@@ -9,3 +9,4 @@ rand = "0.9"
 rand_chacha = "0.9"
 rayon = "1.11"
 fixedbitset = "0.5"
+clap = { version = "4.6.1", features = ["derive"] }

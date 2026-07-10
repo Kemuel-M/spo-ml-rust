@@ -32,10 +32,22 @@ impl HybridVND {
         };
 
         // Ordem sugerida: Inserção Pedidos -> Troca Pedidos -> Remoção Corredores -> Troca Corredores
-        nbh.push(ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..orders_config.clone() } });
-        nbh.push(ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..orders_config.clone() } });
-        nbh.push(ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..aisles_config.clone() } });
-        nbh.push(ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..aisles_config.clone() } });
+        nbh.push(ConfigurableLocalSearch { 
+            config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..orders_config.clone() },
+            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion),
+        });
+        nbh.push(ConfigurableLocalSearch { 
+            config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..orders_config.clone() },
+            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap),
+        });
+        nbh.push(ConfigurableLocalSearch { 
+            config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..aisles_config.clone() },
+            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal),
+        });
+        nbh.push(ConfigurableLocalSearch { 
+            config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..aisles_config.clone() },
+            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap),
+        });
 
         Self { neighborhoods: nbh, max_time_secs: 150 }
     }

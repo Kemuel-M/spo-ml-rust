@@ -5,9 +5,13 @@ pub mod tabu_search;
 pub mod late_acceptance;
 pub mod vnd;
 pub mod hybrid_vnd;
+pub mod hybrid_lahc;
+pub mod hybrid_hill_climbing;
 pub mod configurable;
+pub mod neighborhood;
 
-pub use configurable::{ConfigurableLocalSearch, generate_neighborhood};
+pub use configurable::ConfigurableLocalSearch;
+pub use neighborhood::{Neighborhood, build_neighborhood};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SearchDimension {

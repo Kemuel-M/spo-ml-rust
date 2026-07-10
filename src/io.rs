@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use fixedbitset::FixedBitSet;
 
-pub fn read_input(file_path: &str) -> Result<ProblemData> {
+pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
     let file = File::open(file_path)
     .with_context(|| format!("Failed to open input file: {}", file_path))?;
     let reader = BufReader::new(file);
@@ -42,11 +42,23 @@ pub fn read_input(file_path: &str) -> Result<ProblemData> {
     use crate::solution::DenseItem;
     
     let dense_orders: Vec<Vec<DenseItem>> = orders.iter()
-        .map(|m| m.iter().map(|(&id, &qty)| DenseItem { id, qty }).collect())
+        .map(|m| {
+            let mut v: Vec<DenseItem> = m.iter().map(|(&id, &qty)| DenseItem { id, qty }).collect();
+            if deterministic {
+                v.sort_by_key(|it| it.id);
+            }
+            v
+        })
         .collect();
     
     let dense_aisles: Vec<Vec<DenseItem>> = aisles.iter()
-        .map(|m| m.iter().map(|(&id, &qty)| DenseItem { id, qty }).collect())
+        .map(|m| {
+            let mut v: Vec<DenseItem> = m.iter().map(|(&id, &qty)| DenseItem { id, qty }).collect();
+            if deterministic {
+                v.sort_by_key(|it| it.id);
+            }
+            v
+        })
         .collect();
 
     let order_total_items: Vec<u32> = orders.iter()
@@ -91,7 +103,7 @@ pub fn read_input(file_path: &str) -> Result<ProblemData> {
     use std::sync::Arc;
     let mut order_required_aisles = Vec::with_capacity(n_orders);
     for o_idx in 0..n_orders {
-        let req = compute_order_req(o_idx, n_items, &dense_orders[o_idx], &stock_matrix, &item_locations_bits);
+        let req = compute_order_req(o_idx, n_items, &dense_orders[o_idx], &stock_matrix, &item_locations_bits, deterministic);
         order_required_aisles.push(req);
     }
 
@@ -117,7 +129,8 @@ fn compute_order_req(
     n_items: usize,
     order_items: &[DenseItem],
     stock_matrix: &[u32],
-    item_locations_bits: &[FixedBitSet]
+    item_locations_bits: &[FixedBitSet],
+    deterministic: bool
 ) -> Vec<usize> {
     let mut remaining: HashMap<usize, u32> = order_items.iter().map(|it| (it.id, it.qty)).collect();
     let mut selected = Vec::new();
@@ -135,7 +148,15 @@ fn compute_order_req(
             }
         }
 
-        for &a_idx in &candidate_aisles {
+        let candidates_iter: Vec<usize> = if deterministic {
+            let mut v: Vec<usize> = candidate_aisles.into_iter().collect();
+            v.sort_unstable();
+            v
+        } else {
+            candidate_aisles.into_iter().collect()
+        };
+
+        for a_idx in candidates_iter {
             let mut cov = 0;
             for (&it_id, &dem) in &remaining {
                 cov += std::cmp::min(dem, stock_matrix[a_idx * n_items + it_id]);

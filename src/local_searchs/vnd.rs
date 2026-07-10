@@ -21,9 +21,18 @@ impl VariableNeighborhoodDescent {
         };
         Self {
             neighborhoods: vec![
-                ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..base_config.clone() } },
-                ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..base_config.clone() } },
-                ConfigurableLocalSearch { config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..base_config.clone() } },
+                ConfigurableLocalSearch { 
+                    config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..base_config.clone() },
+                    neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Insertion),
+                },
+                ConfigurableLocalSearch { 
+                    config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..base_config.clone() },
+                    neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Swap),
+                },
+                ConfigurableLocalSearch { 
+                    config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..base_config.clone() },
+                    neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(dimension, NeighborhoodType::Removal),
+                },
             ],
             max_time_secs: 150,
         }

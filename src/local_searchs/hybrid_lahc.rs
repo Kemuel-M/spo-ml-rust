@@ -1,20 +1,38 @@
 use crate::solution::{ChallengeSolution, ProblemData};
 use crate::heuristics::LocalSearchAlgorithm;
 use crate::evaluator::{Evaluator, StockBalanceEvaluator, Move};
-use crate::local_searchs::LocalSearchConfig;
+use crate::local_searchs::{LocalSearchConfig, SearchDimension, NeighborhoodType};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rand::prelude::*;
 
-pub struct LateAcceptanceHillClimbing {
+pub struct HybridLAHC {
     pub config: LocalSearchConfig,
     pub list_size: usize,
-    pub neighborhood_engine: Box<dyn crate::local_searchs::neighborhood::Neighborhood>,
+    pub neighborhoods: Vec<(SearchDimension, Box<dyn crate::local_searchs::neighborhood::Neighborhood>)>,
 }
 
-impl LocalSearchAlgorithm for LateAcceptanceHillClimbing {
+impl HybridLAHC {
+    pub fn new(config: LocalSearchConfig, list_size: usize) -> Self {
+        let mut neighborhoods: Vec<(SearchDimension, Box<dyn crate::local_searchs::neighborhood::Neighborhood>)> = Vec::new();
+        
+        // Add neighborhoods for both dimensions
+        neighborhoods.push((SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion)));
+        neighborhoods.push((SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap)));
+        neighborhoods.push((SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal)));
+        neighborhoods.push((SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap)));
+        
+        Self {
+            config,
+            list_size,
+            neighborhoods,
+        }
+    }
+}
+
+impl LocalSearchAlgorithm for HybridLAHC {
     fn name(&self) -> String {
-        format!("LAHC [L={}, I={} on {:?}]", self.list_size, self.config.max_iterations, self.config.dimension)
+        format!("H-LAHC [L={}, I={}]", self.list_size, self.config.max_iterations)
     }
 
     fn refine(&self, solution: &mut ChallengeSolution, data: &ProblemData, seed: u64) -> bool {
@@ -35,17 +53,27 @@ impl LocalSearchAlgorithm for LateAcceptanceHillClimbing {
         let n_aisles = data.aisles.len();
         let start_time = std::time::Instant::now();
 
+        let mut idle_iterations = 0;
+
         for _ in 0..self.config.max_iterations {
             if start_time.elapsed().as_secs() >= self.config.max_time_secs {
                 break;
             }
+            if idle_iterations >= 200 {
+                break;
+            }
+            
             let mut mv = None;
+            
+            // Randomly select one neighborhood structure
+            let nbh_idx = rng.random_range(0..self.neighborhoods.len());
+            let (dim, engine) = &self.neighborhoods[nbh_idx];
             
             // Try to find a valid random move (limit to 50 attempts to avoid infinite loops)
             for _ in 0..50 {
-                let candidate_mv = self.neighborhood_engine.get_random_move(solution, data, &mut rng)
+                let candidate_mv = engine.get_random_move(solution, data, &mut rng)
                     .unwrap_or_else(|| {
-                        if self.config.dimension == crate::local_searchs::SearchDimension::Orders {
+                        if *dim == SearchDimension::Orders {
                             Move::OrderInsertion(rng.random_range(0..n_orders))
                         } else {
                             Move::AisleInsertion(rng.random_range(0..n_aisles))
@@ -81,6 +109,7 @@ impl LocalSearchAlgorithm for LateAcceptanceHillClimbing {
                         best_global_obj = candidate_obj;
                         best_solution_orders = solution.orders.clone();
                         best_solution_aisles = solution.aisles.clone();
+                        idle_iterations = 0; // Reset early stopping counter
                     }
                 } else {
                     evaluator.rollback();
@@ -89,6 +118,7 @@ impl LocalSearchAlgorithm for LateAcceptanceHillClimbing {
             
             cost_list[list_idx] = evaluator.current_objective();
             list_idx = (list_idx + 1) % self.list_size;
+            idle_iterations += 1;
         }
 
         solution.orders = best_solution_orders;

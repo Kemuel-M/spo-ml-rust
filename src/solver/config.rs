@@ -147,11 +147,16 @@ pub struct BpsoConfig {
     pub w_max: f64,
     pub c1: f64,
     pub c2: f64,
+    pub c1_escape: f64,
+    pub c2_escape: f64,
     pub v_max: f64,
     pub max_time_secs: u64,
     pub stagnation_limit: usize,
+    pub stag_threshold_escape: f64,
+    pub stag_threshold_panic: f64,
     pub p_orders: f64,
     pub ls_prob: f64,
+    pub ls_prob_high: f64,
     pub turbulence_base: f64,
     pub turbulence_high: f64,
     pub score_threshold_orders: f64,
@@ -162,19 +167,22 @@ pub struct BpsoConfig {
 impl Default for BpsoConfig {
     fn default() -> Self {
         Self {
-            pop_size: 100,//50,
-            iterations: 100,
+            pop_size: 100,
+            iterations: 1000,
             w_min: 0.4,
             w_max: 0.9,
             c1: 1.494,
             c2: 1.494,
-            //c1: 2.0,
-            //c2: 1.0,
+            c1_escape: 2.0,
+            c2_escape: 1.0,
             v_max: 4.0,
-            max_time_secs: 150,
-            stagnation_limit: 100,
+            max_time_secs: 600,
+            stagnation_limit: 150,
+            stag_threshold_escape: 0.3,
+            stag_threshold_panic: 0.6,
             p_orders: 0.5,
             ls_prob: 0.15,
+            ls_prob_high: 0.3,
             turbulence_base: 0.05,
             turbulence_high: 0.20,
             score_threshold_orders: 0.5,
@@ -232,29 +240,54 @@ impl SolverConfig {
     }
 
     pub fn adjust_for_data(&mut self, data: &ProblemData) {
-        let n = data.orders.len();
-        if n > 5000 {
-            // Ajustes para instâncias muito grandes
-            self.meta.grasp.iterations = 20;
-            self.meta.ils.iterations = 20;
-            self.meta.ga.generations = 20;
-            self.meta.bpso.iterations = 20;
-            
-            self.ls.max_iterations = 100;
-            self.ls.sampling_size = 1000;
-        }
+        let n = data.orders.len() as f64;
+        
+        // Fator de escala: decai hiperbolicamente para n > 1000
+        let scale_factor = if n <= 1000.0 { 1.0 } else { 1000.0 / n };
+
+        // Meta-heurísticas Base (Padrão 100, piso de 10)
+        let iter_base = (100.0 * scale_factor) as usize;
+        self.meta.grasp.iterations = iter_base.max(10);
+        self.meta.ils.iterations = iter_base.max(10);
+        self.meta.ga.generations = iter_base.max(10);
+
+        // BPSO (Padrão 1000, piso de 50)
+        let bpso_iter = (1000.0 * scale_factor) as usize;
+        self.meta.bpso.iterations = bpso_iter.max(50);
+        
+        // Buscas Locais
+        let ls_iter = (1000.0 * scale_factor) as usize;
+        self.ls.max_iterations = ls_iter.max(50);
+        
+        let ls_sampling = (5000.0 * scale_factor) as usize;
+        self.ls.sampling_size = ls_sampling.max(500);
+    }
+
+    pub fn parse_strategy(&mut self, strategy_str: &str) -> (MetaheuristicType, ConstructiveType, LocalSearchType) {
+        let parts: Vec<&str> = strategy_str.split('+').collect();
+        
+        let meta_str = parts.get(0).unwrap_or(&"single");
+        let constr_str = parts.get(1).unwrap_or(&"order_static");
+        let ls_str = parts.get(2).unwrap_or(&"none");
+
+        let meta = MetaheuristicType::parse(meta_str, self);
+        let constr = std::str::FromStr::from_str(constr_str).unwrap_or(ConstructiveType::OrderStatic);
+        let ls = LocalSearchType::parse(ls_str, self);
+
+        (meta, constr, ls)
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum ConstructiveType {
-    Static,
-    Adaptive,
-    Random,
+    OrderStatic,
+    OrderAdaptive,
+    OrderRandom,
     AisleStatic,
     AisleAdaptive,
     AisleRandom,
     Hybrid,
+    SuperHybrid,
 }
 
 #[derive(Debug, Clone)]
@@ -265,6 +298,8 @@ pub enum LocalSearchType {
     HVnd,
     TabuSearch { dimension: SearchDimension, tenure: usize, iterations: usize },
     LateAcceptance { dimension: SearchDimension, list_size: usize, iterations: usize },
+    HLahc { list_size: usize, iterations: usize },
+    HHc,
 }
 
 #[derive(Debug, Clone)]
@@ -282,4 +317,108 @@ pub enum BpsoDimension {
     Orders,
     Aisles,
     Hybrid,
+}
+
+impl std::str::FromStr for ConstructiveType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let name = s.split(':').next().unwrap_or("order_static");
+        Ok(match name {
+            "order_static" | "os" => ConstructiveType::OrderStatic,
+            "order_adaptive" | "oa" => ConstructiveType::OrderAdaptive,
+            "order_random" | "or" => ConstructiveType::OrderRandom,
+            "aisle_static" | "as" => ConstructiveType::AisleStatic,
+            "aisle_adaptive" | "aa" => ConstructiveType::AisleAdaptive,
+            "aisle_random" | "ar" => ConstructiveType::AisleRandom,
+            "hybrid_random" | "hr" => ConstructiveType::Hybrid,
+            "super_hybrid" | "sh" => ConstructiveType::SuperHybrid,
+            _ => ConstructiveType::OrderStatic,
+        })
+    }
+}
+
+impl MetaheuristicType {
+    pub fn parse(s: &str, config: &mut SolverConfig) -> Self {
+        let parts: Vec<&str> = s.split(':').collect();
+        let m_name = parts[0];
+        let m_val1 = parts.get(1).and_then(|v| v.parse::<f64>().ok());
+        let m_val2 = parts.get(2).and_then(|v| v.parse::<f64>().ok());
+        let m_val3 = parts.get(3).and_then(|v| v.parse::<f64>().ok());
+
+        if let Some(timeout_secs) = m_val3 {
+            let dur = Duration::from_secs(timeout_secs as u64);
+            config.max_runtime = dur;
+            config.meta.grasp.max_time_secs = timeout_secs as u64;
+            config.meta.ils.max_time_secs = timeout_secs as u64;
+            config.meta.sa.max_time_secs = timeout_secs as u64;
+            config.meta.ga.max_time_secs = timeout_secs as u64;
+            config.meta.bpso.max_time_secs = timeout_secs as u64;
+        }
+
+        let dim = if m_name.starts_with("a_") { SearchDimension::Aisles } else { SearchDimension::Orders };
+
+        match m_name {
+            "grasp" | "a_grasp" => MetaheuristicType::Grasp { 
+                iterations: m_val1.map(|v| v as usize).unwrap_or(config.meta.grasp.iterations) 
+            },
+            "ils" | "a_ils" => MetaheuristicType::Ils { 
+                dimension: dim, 
+                iterations: m_val1.map(|v| v as usize).unwrap_or(config.meta.ils.iterations) 
+            },
+            "sa" | "a_sa" => MetaheuristicType::SimulatedAnnealing { 
+                dimension: dim, t0: config.meta.sa.t0, cooling: config.meta.sa.cooling 
+            },
+            "ga" | "a_ga" => MetaheuristicType::GeneticAlgorithm { 
+                dimension: dim, 
+                pop_size: m_val2.map(|v| v as usize).unwrap_or(config.meta.ga.pop_size), 
+                generations: m_val1.map(|v| v as usize).unwrap_or(config.meta.ga.generations) 
+            },
+            "bpso" | "a_bpso" | "h_bpso" => {
+                let b_dim = match m_name {
+                    "a_bpso" => BpsoDimension::Aisles,
+                    "h_bpso" => BpsoDimension::Hybrid,
+                    _ => BpsoDimension::Orders,
+                };
+                MetaheuristicType::Bpso { 
+                    dimension: b_dim, 
+                    pop_size: m_val2.map(|v| v as usize).unwrap_or(config.meta.bpso.pop_size), 
+                    iterations: m_val1.map(|v| v as usize).unwrap_or(config.meta.bpso.iterations) 
+                }
+            },
+            _ => MetaheuristicType::SingleShot,
+        }
+    }
+}
+
+impl LocalSearchType {
+    pub fn parse(s: &str, config: &SolverConfig) -> Self {
+        let parts: Vec<&str> = s.split(':').collect();
+        let l_name = parts[0];
+        let l_val = parts.get(1).and_then(|v| v.parse::<f64>().ok());
+        
+        let dim = if l_name.starts_with("a_") { SearchDimension::Aisles } else { SearchDimension::Orders };
+
+        match l_name {
+            "hvnd" => LocalSearchType::HVnd,
+            "hhc" => LocalSearchType::HHc,
+            "hlahc" => LocalSearchType::HLahc {
+                list_size: 50,
+                iterations: l_val.map(|v| v as usize).unwrap_or(1000)
+            },
+            "vnd" | "a_vnd" => LocalSearchType::Vnd { dimension: dim },
+            "tabu" | "a_tabu" => LocalSearchType::TabuSearch { 
+                dimension: dim, tenure: 20, 
+                iterations: l_val.map(|v| v as usize).unwrap_or(config.ls.max_iterations) 
+            },
+            "lahc" | "a_lahc" => LocalSearchType::LateAcceptance { 
+                dimension: dim, list_size: 50, 
+                iterations: l_val.map(|v| v as usize).unwrap_or(config.ls.max_iterations) 
+            },
+            "swap" | "a_swap" => LocalSearchType::HillClimbing { 
+                dimension: dim, strategy: SearchStrategy::BestImprovement, neighborhood: NeighborhoodType::Swap 
+            },
+            _ => LocalSearchType::None,
+        }
+    }
 }

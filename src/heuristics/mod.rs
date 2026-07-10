@@ -6,6 +6,7 @@ pub mod static_greedy;
 pub mod adaptive_greedy;
 pub mod random_greedy;
 pub mod hybrid_random;
+pub mod super_hybrid;
 pub mod utils;
 pub mod timer;
 

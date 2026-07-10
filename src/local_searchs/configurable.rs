@@ -3,115 +3,11 @@ use crate::heuristics::LocalSearchAlgorithm;
 use crate::evaluator::{Evaluator, StockBalanceEvaluator, Move};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
-use super::{SearchStrategy, NeighborhoodType, LocalSearchConfig, SearchDimension};
+use super::{SearchStrategy, LocalSearchConfig};
 
 pub struct ConfigurableLocalSearch {
     pub config: LocalSearchConfig,
-}
-
-pub fn generate_neighborhood(config: &LocalSearchConfig, solution: &ChallengeSolution, data: &ProblemData) -> Vec<Move> {
-    let mut rng = rand::rng();
-    let mut moves = Vec::new();
-    
-    match config.dimension {
-        SearchDimension::Orders => {
-            let n_orders = data.orders.len();
-            let orders_in: Vec<usize> = solution.orders.ones().collect();
-            
-            if orders_in.is_empty() && (config.neighborhood == NeighborhoodType::Swap || config.neighborhood == NeighborhoodType::Removal) {
-                return moves;
-            }
-
-            match config.neighborhood {
-                NeighborhoodType::Swap => {
-                    let orders_out: Vec<usize> = (0..n_orders).filter(|idx| !solution.orders.contains(*idx)).collect();
-                    if orders_out.is_empty() { return moves; }
-                    
-                    let total_possible = orders_in.len() * orders_out.len();
-                    if total_possible > config.sampling_size {
-                        for _ in 0..config.sampling_size {
-                            let rem = *orders_in.choose(&mut rng).unwrap();
-                            let add = *orders_out.choose(&mut rng).unwrap();
-                            moves.push(Move::OrderSwap(rem, add));
-                        }
-                    } else {
-                        for &rem in &orders_in {
-                            for &add in &orders_out {
-                                moves.push(Move::OrderSwap(rem, add));
-                            }
-                        }
-                    }
-                },
-                NeighborhoodType::Insertion => {
-                    let orders_out: Vec<usize> = (0..n_orders).filter(|idx| !solution.orders.contains(*idx)).collect();
-                    if orders_out.is_empty() { return moves; }
-
-                    if orders_out.len() > config.sampling_size {
-                        let chosen = orders_out.choose_multiple(&mut rng, config.sampling_size);
-                        for &add in chosen { moves.push(Move::OrderInsertion(add)); }
-                    } else {
-                        for &add in &orders_out { moves.push(Move::OrderInsertion(add)); }
-                    }
-                },
-                NeighborhoodType::Removal => {
-                    if orders_in.len() > config.sampling_size {
-                        let chosen = orders_in.choose_multiple(&mut rng, config.sampling_size);
-                        for &rem in chosen { moves.push(Move::OrderRemoval(rem)); }
-                    } else {
-                        for &rem in &orders_in { moves.push(Move::OrderRemoval(rem)); }
-                    }
-                }
-            }
-        },
-        SearchDimension::Aisles => {
-            let n_aisles = data.aisles.len();
-            let aisles_in: Vec<usize> = solution.aisles.ones().collect();
-
-            match config.neighborhood {
-                NeighborhoodType::Swap => {
-                    let aisles_out: Vec<usize> = (0..n_aisles).filter(|idx| !solution.aisles.contains(*idx)).collect();
-                    if aisles_in.is_empty() || aisles_out.is_empty() { return moves; }
-
-                    let total_possible = aisles_in.len() * aisles_out.len();
-                    if total_possible > config.sampling_size {
-                        for _ in 0..config.sampling_size {
-                            let rem = *aisles_in.choose(&mut rng).unwrap();
-                            let add = *aisles_out.choose(&mut rng).unwrap();
-                            moves.push(Move::AisleSwap(rem, add));
-                        }
-                    } else {
-                        for &rem in &aisles_in {
-                            for &add in &aisles_out {
-                                moves.push(Move::AisleSwap(rem, add));
-                            }
-                        }
-                    }
-                },
-                NeighborhoodType::Insertion => {
-                    let aisles_out: Vec<usize> = (0..n_aisles).filter(|idx| !solution.aisles.contains(*idx)).collect();
-                    if aisles_out.is_empty() { return moves; }
-                    if aisles_out.len() > config.sampling_size {
-                        for &add in aisles_out.choose_multiple(&mut rng, config.sampling_size) {
-                            moves.push(Move::AisleInsertion(add));
-                        }
-                    } else {
-                        for &add in &aisles_out { moves.push(Move::AisleInsertion(add)); }
-                    }
-                },
-                NeighborhoodType::Removal => {
-                    if aisles_in.is_empty() { return moves; }
-                    if aisles_in.len() > config.sampling_size {
-                        for &rem in aisles_in.choose_multiple(&mut rng, config.sampling_size) {
-                            moves.push(Move::AisleRemoval(rem));
-                        }
-                    } else {
-                        for &rem in &aisles_in { moves.push(Move::AisleRemoval(rem)); }
-                    }
-                }
-            }
-        }
-    }
-    moves
+    pub neighborhood_engine: Box<dyn crate::local_searchs::neighborhood::Neighborhood>,
 }
 
 impl LocalSearchAlgorithm for ConfigurableLocalSearch {
@@ -179,7 +75,7 @@ impl ConfigurableLocalSearch {
         seed: u64
     ) -> bool {
         let current_obj = evaluator.current_objective();
-        let mut moves = generate_neighborhood(&self.config, solution, data);
+        let mut moves = self.neighborhood_engine.generate_moves(solution, data, self.config.sampling_size);
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         moves.shuffle(&mut rng);
 
@@ -200,7 +96,7 @@ impl ConfigurableLocalSearch {
         data: &ProblemData
     ) -> bool {
         let current_obj = evaluator.current_objective();
-        let moves = generate_neighborhood(&self.config, solution, data);
+        let moves = self.neighborhood_engine.generate_moves(solution, data, self.config.sampling_size);
 
         use rayon::prelude::*;
         

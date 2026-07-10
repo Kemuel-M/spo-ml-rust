@@ -10,8 +10,12 @@ use crate::solver::config::BpsoDimension;
 
 pub struct BPSOConfig {
     pub dimension: BpsoDimension, pub population_size: usize, pub iterations: usize,
-    pub w_min: f64, pub w_max: f64, pub c1: f64, pub c2: f64, pub v_max: f64, pub ls_prob: f64, 
-    pub max_time_secs: u64, pub stagnation_limit: usize, pub p_orders: f64,
+    pub w_min: f64, pub w_max: f64, pub c1: f64, pub c2: f64, 
+    pub c1_escape: f64, pub c2_escape: f64,
+    pub v_max: f64, pub ls_prob: f64, pub ls_prob_high: f64,
+    pub max_time_secs: u64, pub stagnation_limit: usize, 
+    pub stag_threshold_escape: f64, pub stag_threshold_panic: f64,
+    pub p_orders: f64,
     pub turbulence_base: f64, pub turbulence_high: f64,
     pub score_threshold_orders: f64, pub score_threshold_aisles: f64,
     pub log_frequency: usize,
@@ -187,12 +191,24 @@ impl SolverStrategy for BPSO {
             let w = self.config.w_max - (self.config.w_max - self.config.w_min) * (iter as f64 / self.config.iterations as f64);
             let base = rng.next_u64();
             
-            // Adaptive Turbulence: Increases chaos if the swarm stops improving
-            let turbulence_chance = if stagnation_count > self.config.stagnation_limit / 2 {
-                self.config.turbulence_high 
+            // --- INÍCIO: AR-BPSO (Adaptive Reactive) ---
+            // Calcula o quão estagnado o algoritmo está (de 0.0 a 1.0)
+            let stag_ratio = stagnation_count as f64 / self.config.stagnation_limit as f64;
+            
+            // Estágio 1 de Defesa: Alteração Psicológica (A partir de 30% de estagnação)
+            let (current_c1, current_c2) = if stag_ratio > self.config.stag_threshold_escape {
+                (self.config.c1_escape, self.config.c2_escape) // Modo Fuga (Enxame Teimoso e Explorador)
             } else {
-                self.config.turbulence_base 
+                (self.config.c1, self.config.c2) // Modo Harmonia (1.494 - Convergência Rápida)
             };
+
+            // Estágio 2 de Defesa: Caos Dinâmico e Busca Local Reativa (A partir de 60% de estagnação)
+            let (turbulence_chance, current_ls_prob) = if stag_ratio > self.config.stag_threshold_panic {
+                (self.config.turbulence_high, self.config.ls_prob_high) // Pânico
+            } else {
+                (self.config.turbulence_base, self.config.ls_prob) // Voo normal
+            };
+            // --- FIM: AR-BPSO ---
 
             // Convert gbest_s to both dimensions for the swarm to follow
             let gbest_v_orders = Self::solution_to_vec(&gbest_s, SearchDimension::Orders, n_orders);
@@ -208,8 +224,8 @@ impl SolverStrategy for BPSO {
 
                 for j in 0..n {
                     let r1 = lrng.random::<f64>(); let r2 = lrng.random::<f64>();
-                    let cog = self.config.c1 * r1 * (if p.best_position[j] { 1.0 } else { 0.0 } - if p.position[j] { 1.0 } else { 0.0 });
-                    let soc = self.config.c2 * r2 * (if gbest_v[j] { 1.0 } else { 0.0 } - if p.position[j] { 1.0 } else { 0.0 });
+                    let cog = current_c1 * r1 * (if p.best_position[j] { 1.0 } else { 0.0 } - if p.position[j] { 1.0 } else { 0.0 });
+                    let soc = current_c2 * r2 * (if gbest_v[j] { 1.0 } else { 0.0 } - if p.position[j] { 1.0 } else { 0.0 });
                     p.velocity[j] = w * p.velocity[j] + cog + soc;
                     p.velocity[j] = p.velocity[j].clamp(-self.config.v_max, self.config.v_max);
                     v_sum += p.velocity[j].abs();
@@ -227,7 +243,7 @@ impl SolverStrategy for BPSO {
                 
                 let mut ls_hit = 0;
                 let mut ls_attempt = 0;
-                if lrng.random_bool(self.config.ls_prob) { 
+                if lrng.random::<f64>() < current_ls_prob { 
                     ls_attempt = 1;
                     let before_f = utils::compute_objective(&sol, data);
                     self.local_search.refine(&mut sol, data, base + i as u64 + 10000); 

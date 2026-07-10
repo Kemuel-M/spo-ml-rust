@@ -8,6 +8,7 @@ use rayon::prelude::*;
 pub struct TabuSearch {
     pub config: LocalSearchConfig,
     pub tenure: usize,
+    pub neighborhood_engine: Box<dyn crate::local_searchs::neighborhood::Neighborhood>,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -39,7 +40,7 @@ impl LocalSearchAlgorithm for TabuSearch {
             // Cleanup tabu list
             tabu_list.retain(|_, &mut expiry| expiry > current_iter);
             
-            let moves_to_eval = crate::local_searchs::generate_neighborhood(&self.config, solution, data);
+            let moves_to_eval = self.neighborhood_engine.generate_moves(solution, data, self.config.sampling_size);
             if moves_to_eval.is_empty() { break; }
 
             // Parallel evaluation of the entire neighborhood
