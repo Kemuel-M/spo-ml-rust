@@ -28,6 +28,8 @@ pub struct ProblemData {
     pub item_locations_bits: Vec<FixedBitSet>, // Acesso rápido: item_id -> bitset de corredores
     pub order_required_aisles: Arc<Vec<Vec<usize>>>,
     pub aisle_to_orders_req: Arc<Vec<Vec<usize>>>,
+    pub order_initial_aisles_count: Vec<usize>,
+    pub all_order_indices: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]

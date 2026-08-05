@@ -47,9 +47,9 @@ impl BPSO {
             let mut curr_items = 0;
             let mut current_obj = 0.0;
 
-            let mut current_new_ac: Vec<usize> = data.order_required_aisles.iter().map(|req| req.len()).collect();
+            let mut current_new_ac = data.order_initial_aisles_count.clone();
 
-            let mut order_indices: Vec<usize> = (0..n_orders).collect();
+            let mut order_indices = data.all_order_indices.clone();
             order_indices.sort_by(|&a, &b| {
                 scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
             });

@@ -114,6 +114,12 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
         }
     }
 
+    let mut order_initial_aisles_count = Vec::with_capacity(n_orders);
+    for req in &order_required_aisles {
+        order_initial_aisles_count.push(req.len());
+    }
+    let all_order_indices: Vec<usize> = (0..n_orders).collect();
+
     Ok(ProblemData {
         orders,
         aisles,
@@ -129,6 +135,8 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
         item_locations_bits,
         order_required_aisles: Arc::new(order_required_aisles),
         aisle_to_orders_req: Arc::new(aisle_to_orders_req),
+        order_initial_aisles_count,
+        all_order_indices,
     })
 }
 
