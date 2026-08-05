@@ -29,6 +29,7 @@ struct Particle {
     dimension: SearchDimension,
     position: Vec<bool>, velocity: Vec<f64>, best_position: Vec<bool>,
     best_fitness: f64, best_solution: ChallengeSolution, current_solution: ChallengeSolution,
+    rng: ChaCha8Rng,
 }
 
 impl BPSO {
@@ -154,15 +155,17 @@ impl SolverStrategy for BPSO {
             let p = Self::solution_to_vec(&s, dim, n); 
             let mut v = vec![0.0; n];
             for val in v.iter_mut() { *val = rng.random_range(-self.config.v_max..self.config.v_max); }
-            Particle { dimension: dim, position: p.clone(), velocity: v, best_position: p, best_fitness: f, best_solution: s.clone(), current_solution: s }
+            Particle { dimension: dim, position: p.clone(), velocity: v, best_position: p, best_fitness: f, best_solution: s.clone(), current_solution: s, rng }
         }).collect();
 
         let mut gbest_f = -1.0; 
         for p in &particles { if p.best_fitness > gbest_f { gbest_f = p.best_fitness; } }
         let gbest_idx = particles.iter().position(|p| p.best_fitness == gbest_f).unwrap_or(0);
         let mut gbest_s = particles[gbest_idx].best_solution.clone();
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let mut stagnation_count = 0;
+
+        let mut gbest_v_orders = Self::solution_to_vec(&gbest_s, SearchDimension::Orders, n_orders);
+        let mut gbest_v_aisles = Self::solution_to_vec(&gbest_s, SearchDimension::Aisles, n_aisles);
 
         let n_orders_particles = particles.iter().filter(|p| p.dimension == SearchDimension::Orders).count();
         let n_aisles_particles = particles.len() - n_orders_particles;
@@ -184,7 +187,6 @@ impl SolverStrategy for BPSO {
             if stagnation_count >= self.config.stagnation_limit { break; }
 
             let w = self.config.w_max - (self.config.w_max - self.config.w_min) * (iter as f64 / self.config.iterations as f64);
-            let base = rng.next_u64();
             
             // --- INÍCIO: AR-BPSO (Adaptive Reactive) ---
             // Calcula o quão estagnado o algoritmo está (de 0.0 a 1.0)
@@ -206,12 +208,10 @@ impl SolverStrategy for BPSO {
             // --- FIM: AR-BPSO ---
 
             // Convert gbest_s to both dimensions for the swarm to follow
-            let gbest_v_orders = Self::solution_to_vec(&gbest_s, SearchDimension::Orders, n_orders);
-            let gbest_v_aisles = Self::solution_to_vec(&gbest_s, SearchDimension::Aisles, n_aisles);
+            // gbest_v_orders and gbest_v_aisles are updated at the end of the loop if improved
 
             // Parallel computation of movement and stats
-            let stats: (usize, f64, usize, usize, usize, usize, usize) = particles.par_iter_mut().enumerate().map(|(i, p)| {
-                let mut lrng = ChaCha8Rng::seed_from_u64(base + i as u64);
+            let stats: (usize, f64, usize, usize, usize, usize, usize) = particles.par_iter_mut().map(|p| {
                 let n = p.velocity.len();
                 let gbest_v = if p.dimension == SearchDimension::Orders { &gbest_v_orders } else { &gbest_v_aisles };
                 let mut scores = vec![0.0; n];
@@ -220,7 +220,7 @@ impl SolverStrategy for BPSO {
                 let mut h_dist_count = 0;
 
                 for j in 0..n {
-                    let r1 = lrng.random::<f64>(); let r2 = lrng.random::<f64>();
+                    let r1 = p.rng.random::<f64>(); let r2 = p.rng.random::<f64>();
                     let cog = current_c1 * r1 * (if p.best_position[j] { 1.0 } else { 0.0 } - if p.position[j] { 1.0 } else { 0.0 });
                     let soc = current_c2 * r2 * (if gbest_v[j] { 1.0 } else { 0.0 } - if p.position[j] { 1.0 } else { 0.0 });
                     p.velocity[j] = w * p.velocity[j] + cog + soc;
@@ -231,21 +231,23 @@ impl SolverStrategy for BPSO {
                     scores[j] = Self::sigmoid(p.velocity[j]);
                 }
                 
-                if lrng.random::<f64>() < turbulence_chance {
+                if p.rng.random::<f64>() < turbulence_chance {
                     for j in 0..n {
-                        scores[j] = lrng.random::<f64>(); 
-                        p.velocity[j] = lrng.random_range(-self.config.v_max..self.config.v_max);
+                        scores[j] = p.rng.random::<f64>(); 
+                        p.velocity[j] = p.rng.random_range(-self.config.v_max..self.config.v_max);
                     }
                 }
                 
-                let mut sol = self.guided_construct(data, &scores, p.dimension, base + i as u64 + 5000);
+                let seed_construct = p.rng.next_u64();
+                let mut sol = self.guided_construct(data, &scores, p.dimension, seed_construct);
                 
                 let mut ls_hit = 0;
                 let mut ls_attempt = 0;
-                if lrng.random::<f64>() < current_ls_prob { 
+                if p.rng.random::<f64>() < current_ls_prob { 
                     ls_attempt = 1;
                     let before_f = utils::compute_objective(&sol, data);
-                    self.local_search.refine(&mut sol, data, base + i as u64 + 10000); 
+                    let seed_ls = p.rng.next_u64();
+                    self.local_search.refine(&mut sol, data, seed_ls); 
                     if utils::compute_objective(&sol, data) > before_f { ls_hit = 1; }
                 }
                 
@@ -287,7 +289,11 @@ impl SolverStrategy for BPSO {
                 }
             }
 
-            if improved { stagnation_count = 0; } else { stagnation_count += 1; }
+            if improved {
+                gbest_v_orders = Self::solution_to_vec(&gbest_s, SearchDimension::Orders, n_orders);
+                gbest_v_aisles = Self::solution_to_vec(&gbest_s, SearchDimension::Aisles, n_aisles);
+                stagnation_count = 0; 
+            } else { stagnation_count += 1; }
             if iter % self.config.log_frequency == 0 || improved {
                 println!("  {:<6} | {:<10.4} | {:<8.4} | {:>4.1}% | {:<4} | {:<4.2} | {:<4.2} | {:<5.2} | {:>4.1}% | {:>4.1}% | {:>4.1}% | {:>3}s", 
                          iter, gbest_f, avg_fitness, imp_percent, stagnation_count, w, turbulence_chance, avg_v, ls_hit_rate, avg_sat_percent, avg_h_dist_percent, start.elapsed().as_secs());
