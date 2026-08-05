@@ -24,6 +24,8 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    env_logger::init();
+    
     let args = Args::parse();
 
     let input_path = &args.input;

@@ -9,8 +9,6 @@ pub struct RandomGreedy {
     pub alpha: f64,
 }
 
-
-
 impl ConstructiveAlgorithm for RandomGreedy {
     fn name(&self) -> String { format!("Random Greedy (alpha={:.2})", self.alpha) }
 
@@ -22,13 +20,14 @@ impl ConstructiveAlgorithm for RandomGreedy {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let n_orders = data.orders.len();
         let mut solution = ChallengeSolution::new(n_orders, data.aisles.len());
-        let mut surplus_stock = vec![0u32; data.n_items];
+        
+        use crate::evaluator::core_stock::GlobalStock;
+        let mut stock = GlobalStock::new(data.n_items);
+        
         let mut curr_items = 0;
         let mut current_obj = 0.0;
 
-        // Pré-calculo de novos corredores necessários (dinâmico)
         let mut current_new_ac: Vec<usize> = data.order_required_aisles.iter().map(|req| req.len()).collect();
-
 
         let mut unselected: Vec<usize> = (0..n_orders).collect();
         let mut unopened_req = Vec::with_capacity(32);
@@ -49,19 +48,7 @@ impl ConstructiveAlgorithm for RandomGreedy {
                     if !solution.aisles.contains(a) { unopened_req.push(a); }
                 }
                 
-                let mut can_fulfill = true;
-                for item in &data.dense_orders[idx] {
-                    let mut stock_we_will_have = surplus_stock[item.id];
-                    for &a in &unopened_req {
-                        stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
-                    }
-                    if stock_we_will_have < item.qty {
-                        can_fulfill = false;
-                        break;
-                    }
-                }
-                
-                if can_fulfill {
+                if stock.can_fulfill_order_with_aisles(idx, &unopened_req, data) {
                     let new_ac = current_new_ac[idx];
                     let score = if new_ac == 0 { f64::MAX / 2.0 + total as f64 } else { total as f64 / (new_ac as f64).powi(2) };
                     if curr_items >= data.wave_size_lb {
@@ -76,7 +63,6 @@ impl ConstructiveAlgorithm for RandomGreedy {
             if candidates.is_empty() { break; }
             candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 
-            // Escolha aleatória dentro da fatia de qualidade (alpha)
             let limit = (candidates.len() as f64 * self.alpha).max(1.0) as usize;
             let chosen_idx_in_candidates = if self.alpha == 0.0 { 0 } else { rng.random_range(0..limit.min(candidates.len())) };
             let (chosen_id, _) = candidates.remove(chosen_idx_in_candidates);
@@ -87,31 +73,23 @@ impl ConstructiveAlgorithm for RandomGreedy {
             let total = data.order_total_items[chosen_id];
             let req = &data.order_required_aisles[chosen_id];
 
-            // Aplica a escolha
+            unopened_req.clear();
+            for &a in req {
+                if !solution.aisles.contains(a) { unopened_req.push(a); }
+            }
+
             solution.orders.insert(chosen_id);
             curr_items += total;
             
-            let mut newly_added_aisles = Vec::new();
-            for &a in req {
-                if !solution.aisles.contains(a) {
-                    solution.aisles.insert(a);
-                    newly_added_aisles.push(a);
-                    for item in &data.dense_aisles[a] {
-                        surplus_stock[item.id] += item.qty;
-                    }
-                }
-            }
-            
-            for item in &data.dense_orders[chosen_id] {
-                surplus_stock[item.id] -= item.qty;
-            }
-            
-            // Atualiza o custo incremental (corredores) de todas as outras ordens afetadas
-            for &a in &newly_added_aisles {
+            for &a in &unopened_req {
+                solution.aisles.insert(a);
+                stock.add_aisle_dense(a, data);
                 for &o_idx in &data.aisle_to_orders_req[a] {
                     current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1);
                 }
             }
+            
+            stock.remove_order_sparse(chosen_id, data);
             
             current_obj = curr_items as f64 / solution.aisles.count_ones(..) as f64;
         }

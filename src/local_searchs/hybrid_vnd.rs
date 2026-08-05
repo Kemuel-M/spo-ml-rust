@@ -1,7 +1,9 @@
 use crate::solution::{ChallengeSolution, ProblemData};
 use crate::heuristics::LocalSearchAlgorithm;
 use crate::local_searchs::{ConfigurableLocalSearch, SearchStrategy, NeighborhoodType, LocalSearchConfig, SearchDimension};
+use crate::evaluator::{StockBalanceEvaluator, Evaluator, Move};
 use std::time::Instant;
+use log::{debug, trace};
 
 pub struct HybridVND {
     pub neighborhoods: Vec<ConfigurableLocalSearch>,
@@ -58,6 +60,9 @@ impl LocalSearchAlgorithm for HybridVND {
 
     fn refine(&self, solution: &mut ChallengeSolution, data: &ProblemData, seed: u64) -> bool {
         let start_time = Instant::now();
+        let mut eval = StockBalanceEvaluator::new(solution, data);
+        debug!("HVND Iniciado: score base={:.4}", eval.current_objective());
+        
         let mut k = 0;
         let mut global_improvement = false;
 
@@ -71,6 +76,7 @@ impl LocalSearchAlgorithm for HybridVND {
 
             if improved {
                 global_improvement = true;
+                debug!("HVND: melhoria encontrada na vizinhança {}, novo score={:.4}", k, eval.current_objective());
                 k = 0; // Volta para o início se melhorou
             } else {
                 k += 1;

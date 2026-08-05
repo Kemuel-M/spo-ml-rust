@@ -1,4 +1,5 @@
 use crate::solution::{ChallengeSolution, ProblemData};
+use log::{info, debug, trace};
 use crate::heuristics::{SolverStrategy, ConstructiveAlgorithm, LocalSearchAlgorithm, utils};
 use crate::local_searchs::SearchDimension;
 use rand::prelude::*;
@@ -30,6 +31,8 @@ struct Particle {
     position: Vec<bool>, velocity: Vec<f64>, best_position: Vec<bool>,
     best_fitness: f64, best_solution: ChallengeSolution, current_solution: ChallengeSolution,
     rng: ChaCha8Rng,
+    scores_buffer: Vec<f64>,
+    indices_buffer: Vec<usize>,
 }
 
 impl BPSO {
@@ -39,23 +42,26 @@ impl BPSO {
         for idx in bits.ones() { if idx < n { v[idx] = true; } } v
     }
 
-    fn guided_construct(&self, data: &ProblemData, scores: &[f64], dim: SearchDimension, _seed: u64) -> ChallengeSolution {
+    fn guided_construct(&self, data: &ProblemData, scores: &[f64], dim: SearchDimension, _seed: u64, indices: &mut Vec<usize>) -> ChallengeSolution {
         let n_orders = data.orders.len();
         if dim == SearchDimension::Orders {
             let mut sol = ChallengeSolution::new(n_orders, data.aisles.len());
-            let mut surplus_stock = vec![0u32; data.n_items];
+            use crate::evaluator::core_stock::GlobalStock;
+            let mut stock = GlobalStock::new(data.n_items);
+            
             let mut curr_items = 0;
             let mut current_obj = 0.0;
 
             let mut current_new_ac = data.order_initial_aisles_count.clone();
 
-            let mut order_indices = data.all_order_indices.clone();
-            order_indices.sort_by(|&a, &b| {
+            indices.clear();
+            indices.extend_from_slice(&data.all_order_indices);
+            indices.sort_by(|&a, &b| {
                 scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
             });
 
             let mut unopened_req = Vec::with_capacity(32);
-            for &idx in &order_indices {
+            for &idx in indices.iter() {
                 if curr_items >= data.wave_size_ub { break; }
                 let total = data.order_total_items[idx];
                 if curr_items + total > data.wave_size_ub { continue; }
@@ -65,43 +71,22 @@ impl BPSO {
                     if !sol.aisles.contains(a) { unopened_req.push(a); }
                 }
                 
-                let mut can_fulfill = true;
-                for item in &data.dense_orders[idx] {
-                    let mut stock_we_will_have = surplus_stock[item.id];
-                    for &a in &unopened_req {
-                        stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
-                    }
-                    if stock_we_will_have < item.qty {
-                        can_fulfill = false;
-                        break;
-                    }
-                }
-                if !can_fulfill { continue; }
+                if !stock.can_fulfill_order_with_aisles(idx, &unopened_req, data) { continue; }
 
                 if curr_items >= data.wave_size_lb {
-                    let new_ac_count = current_new_ac[idx];
-                    let total_ac = sol.aisles.count_ones(..) + new_ac_count;
+                    let total_ac = sol.aisles.count_ones(..) + unopened_req.len();
                     let new_obj = (curr_items + total) as f64 / total_ac as f64;
                     if new_obj <= current_obj && scores[idx] < self.config.score_threshold_orders { continue; }
                 }
 
-                sol.orders.insert(idx);
                 curr_items += total;
-                let mut newly_added_aisles = Vec::new();
-                for &a in &data.order_required_aisles[idx] {
-                    if !sol.aisles.contains(a) { 
-                        sol.aisles.insert(a); 
-                        newly_added_aisles.push(a); 
-                        for item in &data.dense_aisles[a] {
-                            surplus_stock[item.id] += item.qty;
-                        }
-                    }
+                sol.orders.insert(idx);
+                for &a in &unopened_req {
+                    sol.aisles.insert(a);
+                    stock.add_aisle_dense(a, data);
                 }
-
-                for item in &data.dense_orders[idx] {
-                    surplus_stock[item.id] -= item.qty;
-                }
-                for &a in &newly_added_aisles {
+                stock.remove_order_sparse(idx, data);
+                for &a in &unopened_req {
                     for &o_idx in &data.aisle_to_orders_req[a] { current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1); }
                 }
                 current_obj = curr_items as f64 / sol.aisles.count_ones(..) as f64;
@@ -112,37 +97,30 @@ impl BPSO {
         } else {
             // Aisle-Centric Guided Construct
             let mut sol = ChallengeSolution::new(n_orders, data.aisles.len());
-            let mut total_curr_stock = vec![0u32; data.n_items];
+            use crate::evaluator::core_stock::GlobalStock;
+            let mut stock = GlobalStock::new(data.n_items);
             let mut total_items = 0;
             
-            let mut aisle_indices: Vec<usize> = (0..data.aisles.len()).collect();
-            aisle_indices.sort_by(|&a, &b| {
+            indices.clear();
+            indices.extend(0..data.aisles.len());
+            indices.sort_by(|&a, &b| {
                 scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
             });
 
-            for &aid in &aisle_indices {
+            for &aid in indices.iter() {
                 if total_items >= data.wave_size_ub { break; }
                 if scores[aid] < self.config.score_threshold_aisles { continue; }
 
                 sol.aisles.insert(aid);
-                for item in &data.dense_aisles[aid] {
-                    total_curr_stock[item.id] += item.qty;
-                }
+                stock.add_aisle_dense(aid, data);
 
                 for &oid in &data.orders_sorted_by_size {
                     if sol.orders.contains(oid) { continue; }
                     let oqty = data.order_total_items[oid];
                     if total_items + oqty > data.wave_size_ub { continue; }
 
-                    let mut can_fulfill = true;
-                    for item in &data.dense_orders[oid] {
-                        if total_curr_stock[item.id] < item.qty { can_fulfill = false; break; }
-                    }
-
-                    if can_fulfill {
-                        for item in &data.dense_orders[oid] {
-                            total_curr_stock[item.id] -= item.qty;
-                        }
+                    if stock.can_add_order_safely(oid, data) {
+                        stock.remove_order_sparse(oid, data);
                         sol.orders.insert(oid);
                         total_items += oqty;
                     }
@@ -176,7 +154,7 @@ impl SolverStrategy for BPSO {
             let p = Self::solution_to_vec(&s, dim, n); 
             let mut v = vec![0.0; n];
             for val in v.iter_mut() { *val = rng.random_range(-self.config.v_max..self.config.v_max); }
-            Particle { dimension: dim, position: p.clone(), velocity: v, best_position: p, best_fitness: f, best_solution: s.clone(), current_solution: s, rng }
+            Particle { dimension: dim, position: p.clone(), velocity: v, best_position: p, best_fitness: f, best_solution: s.clone(), current_solution: s, rng, scores_buffer: vec![0.0; n], indices_buffer: Vec::with_capacity(n_orders.max(n_aisles)) }
         }).collect();
 
         let mut gbest_f = -1.0; 
@@ -207,6 +185,11 @@ impl SolverStrategy for BPSO {
             if start.elapsed() >= max_dur { break; }
             if stagnation_count >= self.config.stagnation_limit { break; }
 
+            if iter % 10 == 0 || iter == self.config.iterations - 1 {
+                info!("BPSO Iteração {}: Melhor Score Global = {:.4}", 
+                    iter, gbest_f);
+            }
+
             let w = self.config.w_max - (self.config.w_max - self.config.w_min) * (iter as f64 / self.config.iterations as f64);
             
             // --- INÍCIO: AR-BPSO (Adaptive Reactive) ---
@@ -235,7 +218,7 @@ impl SolverStrategy for BPSO {
             let stats: (usize, f64, usize, usize, usize, usize, usize) = particles.par_iter_mut().map(|p| {
                 let n = p.velocity.len();
                 let gbest_v = if p.dimension == SearchDimension::Orders { &gbest_v_orders } else { &gbest_v_aisles };
-                let mut scores = vec![0.0; n];
+                let scores = &mut p.scores_buffer;
                 let mut v_sum = 0.0;
                 let mut v_sat_count = 0;
                 let mut h_dist_count = 0;
@@ -260,7 +243,7 @@ impl SolverStrategy for BPSO {
                 }
                 
                 let seed_construct = p.rng.next_u64();
-                let mut sol = self.guided_construct(data, &scores, p.dimension, seed_construct);
+                let mut sol = self.guided_construct(data, &p.scores_buffer, p.dimension, seed_construct, &mut p.indices_buffer);
                 
                 let mut ls_hit = 0;
                 let mut ls_attempt = 0;

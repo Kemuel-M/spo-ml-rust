@@ -1,7 +1,7 @@
-use crate::solution::{ChallengeSolution, ProblemData, DenseItem};
-use std::sync::Arc;
+use crate::solution::{ChallengeSolution, ProblemData};
 use super::types::{Evaluator, Move};
 use fixedbitset::FixedBitSet;
+use super::core_stock::GlobalStock;
 
 #[derive(Clone)]
 struct Change {
@@ -14,46 +14,39 @@ pub struct StockBalanceEvaluator {
     pub orders: FixedBitSet,
     pub aisles: FixedBitSet,
     pub total_items: u32,
-    balance: Vec<i32>,
+    pub stock: GlobalStock,
     violations: usize,
     violating_items: FixedBitSet,
     pub wave_size_lb: u32,
     pub wave_size_ub: u32,
-    dense_orders: Arc<Vec<Vec<DenseItem>>>,
-    dense_aisles: Arc<Vec<Vec<DenseItem>>>,
     
-    // Estado para Rollback (Cópia leve)
+    // Estado para Rollback
     last_orders: FixedBitSet,
     last_aisles: FixedBitSet,
     last_total_items: u32,
     last_violations: usize,
     last_violating_items: FixedBitSet,
     
-    // Log de alterações cirúrgico (O segredo da performance)
+    // Log de alterações cirúrgico
     change_log: Vec<Change>,
 }
 
 impl StockBalanceEvaluator {
     pub fn new(solution: &ChallengeSolution, data: &ProblemData) -> Self {
         let n_items = data.n_items;
-        let mut balance = vec![0i32; n_items];
+        let stock = GlobalStock::from_solution(solution, data);
         let mut total_items = 0;
         for o in solution.orders.ones() {
-            for item in &data.dense_orders[o] { if item.id < n_items { balance[item.id] -= item.qty as i32; } }
             total_items += data.order_total_items[o];
-        }
-        for a in solution.aisles.ones() {
-            for item in &data.dense_aisles[a] { if item.id < n_items { balance[item.id] += item.qty as i32; } }
         }
         let mut vit = FixedBitSet::with_capacity(n_items);
         let mut v = 0;
-        for (i, &b) in balance.iter().enumerate() { if b < 0 { v += 1; vit.insert(i); } }
+        for (i, &b) in stock.balance.iter().enumerate() { if b < 0 { v += 1; vit.insert(i); } }
 
         Self {
             orders: solution.orders.clone(), aisles: solution.aisles.clone(), total_items,
-            balance, violations: v, violating_items: vit,
+            stock, violations: v, violating_items: vit,
             wave_size_lb: data.wave_size_lb, wave_size_ub: data.wave_size_ub,
-            dense_orders: data.dense_orders.clone(), dense_aisles: data.dense_aisles.clone(),
             last_orders: solution.orders.clone(), last_aisles: solution.aisles.clone(),
             last_total_items: total_items, last_violations: v,
             last_violating_items: FixedBitSet::with_capacity(n_items), 
@@ -67,14 +60,13 @@ impl StockBalanceEvaluator {
         self
     }
 
-    fn update_order(&mut self, o: usize, add: bool) {
-        let items = &self.dense_orders[o];
+    fn update_order(&mut self, o: usize, add: bool, data: &ProblemData) {
+        let items = &data.dense_orders[o];
         let mut sum = 0;
         for item in items {
-            // Registra a mudança para o Undo
-            self.change_log.push(Change { idx: item.id, old_balance: self.balance[item.id] });
+            self.change_log.push(Change { idx: item.id, old_balance: self.stock.balance[item.id] });
             
-            let b = &mut self.balance[item.id];
+            let b = &mut self.stock.balance[item.id];
             if add {
                 if *b >= 0 && *b - (item.qty as i32) < 0 { self.violations += 1; self.violating_items.insert(item.id); }
                 *b -= item.qty as i32;
@@ -87,12 +79,11 @@ impl StockBalanceEvaluator {
         if add { self.total_items += sum; } else { self.total_items -= sum; }
     }
 
-    fn update_aisle(&mut self, a: usize, add: bool) {
-        for item in &self.dense_aisles[a] {
-            // Registra a mudança para o Undo
-            self.change_log.push(Change { idx: item.id, old_balance: self.balance[item.id] });
+    fn update_aisle(&mut self, a: usize, add: bool, data: &ProblemData) {
+        for item in &data.dense_aisles[a] {
+            self.change_log.push(Change { idx: item.id, old_balance: self.stock.balance[item.id] });
 
-            let b = &mut self.balance[item.id];
+            let b = &mut self.stock.balance[item.id];
             if add {
                 if *b < 0 && *b + (item.qty as i32) >= 0 { self.violations -= 1; self.violating_items.remove(item.id); }
                 *b += item.qty as i32;
@@ -122,39 +113,36 @@ impl Evaluator for StockBalanceEvaluator {
     fn get_active_orders(&self) -> FixedBitSet { self.orders.clone() }
 
     fn try_apply_order_swap(&mut self, out: usize, in_id: usize, data: &ProblemData) {
-        self.update_order(out, false); self.orders.remove(out);
-        self.update_order(in_id, true); self.orders.insert(in_id);
+        self.update_order(out, false, data); self.orders.remove(out);
+        self.update_order(in_id, true, data); self.orders.insert(in_id);
         self.sync_aisles_from_orders(data);
     }
     fn try_apply_order_add(&mut self, in_id: usize, data: &ProblemData) {
-        self.update_order(in_id, true); self.orders.insert(in_id);
+        self.update_order(in_id, true, data); self.orders.insert(in_id);
         self.sync_aisles_from_orders(data);
     }
     fn try_apply_order_remove(&mut self, out: usize, data: &ProblemData) {
-        self.update_order(out, false); self.orders.remove(out);
+        self.update_order(out, false, data); self.orders.remove(out);
         self.sync_aisles_from_orders(data);
     }
     fn try_apply_aisle_swap(&mut self, out: usize, in_id: usize, data: &ProblemData) {
-        self.update_aisle(out, false); self.aisles.remove(out);
-        self.update_aisle(in_id, true); self.aisles.insert(in_id);
+        self.update_aisle(out, false, data); self.aisles.remove(out);
+        self.update_aisle(in_id, true, data); self.aisles.insert(in_id);
         self.sync_orders_from_aisles(data);
     }
     fn try_apply_aisle_add(&mut self, in_id: usize, data: &ProblemData) {
-        self.update_aisle(in_id, true); self.aisles.insert(in_id);
+        self.update_aisle(in_id, true, data); self.aisles.insert(in_id);
         self.sync_orders_from_aisles(data);
     }
     fn try_apply_aisle_remove(&mut self, out: usize, data: &ProblemData) {
-        self.update_aisle(out, false); self.aisles.remove(out);
+        self.update_aisle(out, false, data); self.aisles.remove(out);
         self.sync_orders_from_aisles(data);
     }
 
     fn rollback(&mut self) {
-        // Desfaz as mudanças no vetor de balanço (O(N_mudanças) em vez de O(N_total))
         while let Some(change) = self.change_log.pop() {
-            self.balance[change.idx] = change.old_balance;
+            self.stock.balance[change.idx] = change.old_balance;
         }
-        
-        // Restaura estados simples
         self.orders.clone_from(&self.last_orders); 
         self.aisles.clone_from(&self.last_aisles);
         self.total_items = self.last_total_items; 
@@ -163,9 +151,7 @@ impl Evaluator for StockBalanceEvaluator {
     }
     
     fn commit(&mut self) {
-        // No commit, apenas limpamos o log (as mudanças já estão no balance)
         self.change_log.clear();
-        
         self.last_orders.clone_from(&self.orders); 
         self.last_aisles.clone_from(&self.aisles);
         self.last_total_items = self.total_items; 
@@ -180,36 +166,60 @@ impl Evaluator for StockBalanceEvaluator {
                 for a_idx in data.item_locations_bits[it_id].ones() {
                     if self.aisles.contains(a_idx) { continue; }
                     let mut red = 0;
-                    for a_item in &self.dense_aisles[a_idx] {
-                        let cb = self.balance[a_item.id];
+                    for a_item in &data.dense_aisles[a_idx] {
+                        let cb = self.stock.balance[a_item.id];
                         if cb < 0 { red += std::cmp::min(a_item.qty as i32, -cb); }
                     }
                     if red > max_red { max_red = red; best_aisle = Some(a_idx); }
                 }
             }
-            if let Some(a_idx) = best_aisle { self.update_aisle(a_idx, true); self.aisles.insert(a_idx); } else { break; }
+            if let Some(a_idx) = best_aisle { self.update_aisle(a_idx, true, data); self.aisles.insert(a_idx); } else { break; }
         }
         let active: Vec<usize> = self.aisles.ones().collect();
         for a_idx in active {
-            let mut can_rem = true;
-            for item in &self.dense_aisles[a_idx] { if self.balance[item.id] - (item.qty as i32) < 0 { can_rem = false; break; } }
-            if can_rem { self.update_aisle(a_idx, false); self.aisles.remove(a_idx); }
+            if self.stock.can_remove_aisle_safely(a_idx, data) {
+                self.update_aisle(a_idx, false, data); self.aisles.remove(a_idx);
+            }
         }
     }
 
-    fn sync_orders_from_aisles(&mut self, _data: &ProblemData) {
+    fn sync_orders_from_aisles(&mut self, data: &ProblemData) {
         while self.violations > 0 && self.orders.count_ones(..) > 0 {
             let vit = self.violating_items.ones().next().unwrap();
             let mut orem = None;
             for o_idx in self.orders.ones() {
-                for item in &self.dense_orders[o_idx] { if item.id == vit { orem = Some(o_idx); break; } }
+                for item in &data.dense_orders[o_idx] { if item.id == vit { orem = Some(o_idx); break; } }
                 if orem.is_some() { break; }
             }
-            if let Some(o_idx) = orem { self.update_order(o_idx, false); self.orders.remove(o_idx); } else { break; }
+            if let Some(o_idx) = orem { self.update_order(o_idx, false, data); self.orders.remove(o_idx); } else { break; }
         }
     }
 
     fn validate_move(&mut self, mv: &Move, data: &ProblemData) -> bool {
+        // Lookahead para movimentos destrutivos que não dependem de reparo
+        match *mv {
+            Move::OrderInsertion(i) => {
+                // Se a inserção estourar o limite UB, já era (reparo remove ordens, o que anula o movimento se for a mesma ordem, ou remove outras)
+                if self.total_items + data.order_total_items[i] > self.wave_size_ub {
+                    return false;
+                }
+                // Se o pedido pode ser inserido sem estourar o estoque global
+                // No caso do OrderInsertion, se não puder ser inserido com segurança, o sync_aisles vai abrir corredores!
+                // Então só abortamos se a adição de corredores não for capaz de consertar, mas como saber?
+                // Portanto o lookahead para OrderInsertion não é trivial de abortar.
+            },
+            Move::AisleRemoval(o) => {
+                // Se a remoção for segura, beleza. Se não for segura, o sync_orders removeria ordens.
+                // Mas remover ordens diminui a wave size. 
+                // Para simplificar, assumimos que Local Search é explorativa, mas Lookahead puro é:
+                // Se não pode remover com segurança e não queremos propagar remoção de ordens:
+                if !self.stock.can_remove_aisle_safely(o, data) {
+                    return false;
+                }
+            },
+            _ => {}
+        }
+        
         match *mv {
             Move::OrderSwap(o, i) => self.try_apply_order_swap(o, i, data),
             Move::OrderInsertion(i) => self.try_apply_order_add(i, data),

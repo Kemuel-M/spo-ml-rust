@@ -4,6 +4,7 @@ use crate::evaluator::{Evaluator, StockBalanceEvaluator, Move};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use super::{SearchStrategy, LocalSearchConfig};
+use log::{trace, debug};
 
 pub struct ConfigurableLocalSearch {
     pub config: LocalSearchConfig,
@@ -40,6 +41,7 @@ impl LocalSearchAlgorithm for ConfigurableLocalSearch {
             
             match self.config.strategy {
                 SearchStrategy::FirstImprovement => {
+                    trace!("  [{}] FirstImprovement Iter: {}", self.name(), iter_count);
                     if self.run_first_improvement(&mut *evaluator, solution, data, seed + iter_count as u64) {
                         improved_iter = true;
                         global_improvement = true;
@@ -82,6 +84,7 @@ impl ConfigurableLocalSearch {
         for mv in moves {
             if evaluator.validate_move(&mv, data) {
                 if self.apply_move(evaluator, solution, data, mv, current_obj) {
+                    trace!("    Melhoria encontrada: {:.4} via {:?}", evaluator.current_objective(), mv);
                     return true;
                 }
             }

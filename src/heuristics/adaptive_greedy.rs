@@ -9,7 +9,10 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
     fn construct(&self, data: &ProblemData, _seed: u64) -> ChallengeSolution {
         let n_orders = data.orders.len();
         let mut solution = ChallengeSolution::new(n_orders, data.aisles.len());
-        let mut surplus_stock = vec![0u32; data.n_items];
+        
+        use crate::evaluator::core_stock::GlobalStock;
+        let mut stock = GlobalStock::new(data.n_items);
+        
         let mut curr_items = 0;
         let mut best_obj = 0.0;
         let mut unselected = vec![true; n_orders];
@@ -36,8 +39,6 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
                     total as f64 / new_ac as f64
                 };
                 
-                // Deterministic tie-break: if scores are equal, the lower index wins
-                // because we iterate idx from 0 to n_orders.
                 if score > max_score {
                     let req = &data.order_required_aisles[idx];
                     
@@ -46,19 +47,7 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
                         if !solution.aisles.contains(a) { unopened_req.push(a); }
                     }
                     
-                    let mut can_fulfill = true;
-                    for item in &data.dense_orders[idx] {
-                        let mut stock_we_will_have = surplus_stock[item.id];
-                        for &a in &unopened_req {
-                            stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
-                        }
-                        if stock_we_will_have < item.qty {
-                            can_fulfill = false;
-                            break;
-                        }
-                    }
-                    
-                    if can_fulfill {
+                    if stock.can_fulfill_order_with_aisles(idx, &unopened_req, data) {
                         if curr_items >= data.wave_size_lb {
                             let total_ac = solution.aisles.count_ones(..) + new_ac;
                             let new_obj = (curr_items + total) as f64 / total_ac as f64;
@@ -74,27 +63,21 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
                 let req = &data.order_required_aisles[idx];
                 let total = data.order_total_items[idx];
                 
-                solution.orders.insert(idx);
-                let mut newly_added_aisles = Vec::new();
+                unopened_req.clear();
                 for &a in req {
-                    if !solution.aisles.contains(a) {
-                        solution.aisles.insert(a);
-                        newly_added_aisles.push(a);
-                        for item in &data.dense_aisles[a] {
-                            surplus_stock[item.id] += item.qty;
-                        }
-                    }
+                    if !solution.aisles.contains(a) { unopened_req.push(a); }
                 }
                 
-                for item in &data.dense_orders[idx] {
-                    surplus_stock[item.id] -= item.qty;
-                }
-                
-                for &a in &newly_added_aisles {
+                solution.orders.insert(idx);
+                for &a in &unopened_req {
+                    solution.aisles.insert(a);
+                    stock.add_aisle_dense(a, data);
                     for &o_idx in &data.aisle_to_orders_req[a] {
                          current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1);
                     }
                 }
+                
+                stock.remove_order_sparse(idx, data);
                 
                 curr_items += total;
                 unselected[idx] = false;
