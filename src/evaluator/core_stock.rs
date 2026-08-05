@@ -16,7 +16,7 @@ impl GlobalStock {
 
     pub fn from_solution(solution: &ChallengeSolution, data: &ProblemData) -> Self {
         let mut gs = Self::new(data.n_items);
-        for a in solution.aisles.ones() { gs.add_aisle_dense(a, data); }
+        for a in solution.aisles.ones() { gs.add_aisle_sparse(a, data); }
         for o in solution.orders.ones() { gs.remove_order_sparse(o, data); }
         gs
     }
@@ -30,6 +30,13 @@ impl GlobalStock {
         // The compiler will vectorize this loop natively without branches
         for i in 0..self.n_items {
             balance[i] += aisle_stock[i] as i32;
+        }
+    }
+
+    #[inline(always)]
+    pub fn add_aisle_sparse(&mut self, a: usize, data: &ProblemData) {
+        for item in &data.dense_aisles[a] {
+            self.balance[item.id] += item.qty as i32;
         }
     }
 

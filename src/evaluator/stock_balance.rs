@@ -199,21 +199,8 @@ impl Evaluator for StockBalanceEvaluator {
         // Lookahead para movimentos destrutivos que não dependem de reparo
         match *mv {
             Move::OrderInsertion(i) => {
-                // Se a inserção estourar o limite UB, já era (reparo remove ordens, o que anula o movimento se for a mesma ordem, ou remove outras)
+                // Se a inserção estourar o limite UB, aborta (inserir corredores não reduz a quantidade de itens da ordem)
                 if self.total_items + data.order_total_items[i] > self.wave_size_ub {
-                    return false;
-                }
-                // Se o pedido pode ser inserido sem estourar o estoque global
-                // No caso do OrderInsertion, se não puder ser inserido com segurança, o sync_aisles vai abrir corredores!
-                // Então só abortamos se a adição de corredores não for capaz de consertar, mas como saber?
-                // Portanto o lookahead para OrderInsertion não é trivial de abortar.
-            },
-            Move::AisleRemoval(o) => {
-                // Se a remoção for segura, beleza. Se não for segura, o sync_orders removeria ordens.
-                // Mas remover ordens diminui a wave size. 
-                // Para simplificar, assumimos que Local Search é explorativa, mas Lookahead puro é:
-                // Se não pode remover com segurança e não queremos propagar remoção de ordens:
-                if !self.stock.can_remove_aisle_safely(o, data) {
                     return false;
                 }
             },

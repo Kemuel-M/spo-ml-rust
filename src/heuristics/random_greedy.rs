@@ -83,7 +83,7 @@ impl ConstructiveAlgorithm for RandomGreedy {
             
             for &a in &unopened_req {
                 solution.aisles.insert(a);
-                stock.add_aisle_dense(a, data);
+                stock.add_aisle_sparse(a, data);
                 for &o_idx in &data.aisle_to_orders_req[a] {
                     current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1);
                 }

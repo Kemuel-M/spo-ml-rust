@@ -50,7 +50,7 @@ impl ConstructiveAlgorithm for StaticGreedy {
             solution.orders.insert(idx);
             for &a in &unopened_req {
                 solution.aisles.insert(a);
-                stock.add_aisle_dense(a, data);
+                stock.add_aisle_sparse(a, data);
             }
             stock.remove_order_sparse(idx, data);
             

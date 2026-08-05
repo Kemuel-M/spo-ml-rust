@@ -83,7 +83,7 @@ impl BPSO {
                 sol.orders.insert(idx);
                 for &a in &unopened_req {
                     sol.aisles.insert(a);
-                    stock.add_aisle_dense(a, data);
+                    stock.add_aisle_sparse(a, data);
                 }
                 stock.remove_order_sparse(idx, data);
                 for &a in &unopened_req {
@@ -112,7 +112,7 @@ impl BPSO {
                 if scores[aid] < self.config.score_threshold_aisles { continue; }
 
                 sol.aisles.insert(aid);
-                stock.add_aisle_dense(aid, data);
+                stock.add_aisle_sparse(aid, data);
 
                 for &oid in &data.orders_sorted_by_size {
                     if sol.orders.contains(oid) { continue; }
