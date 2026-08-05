@@ -9,12 +9,12 @@ import re
 # =============================================================================
 
 # --- Dataset e Execução ---
-DATASET = "b"               # Opções: "a", "b", "x"
+DATASET = "x"               # Opções: "a", "b", "x"
 
 # Lista de instâncias específicas para rodar. Se a lista não estiver vazia, rodará apenas estas instâncias.
 # Deixe vazia (SELECTED_INSTANCES = []) para rodar todas as instâncias do dataset (sujeito ao MAX_INSTANCES).
 # Exemplo: SELECTED_INSTANCES = ["instance_0014.txt", "instance_0015.txt"]
-SELECTED_INSTANCES = ["instance_0015.txt"]
+SELECTED_INSTANCES = ["instance_0010.txt"]
 
 SEED = "0"                  # Semente aleatória (use "0" para semente do sistema)
 TIMEOUT_LIMIT = 600         # Tempo máximo por instância em segundos (PASSADO PARA O RUST)
@@ -23,7 +23,7 @@ TIMEOUT_LIMIT = 600         # Tempo máximo por instância em segundos (PASSADO 
 # Nota: Este parâmetro é ignorado caso SELECTED_INSTANCES não esteja vazia.
 MAX_INSTANCES = 0           
 
-RUNS_PER_INSTANCE = 1      # Quantidade de vezes que cada instância será executada
+RUNS_PER_INSTANCE = 10      # Quantidade de vezes que cada instância será executada
 
 # --- Parâmetros da Meta-heurística ---
 # Meta-heurística base
@@ -33,8 +33,17 @@ ITERATIONS = 1000           # Número de iterações do BPSO
 POP_SIZE = 100              # Tamanho da população
 
 # Estratégias base para população inicial (Construtivos)
+# Opções implementadas (nome extenso ou sigla):
+# - "order_static"   ou "os"
+# - "order_adaptive" ou "oa"
+# - "order_random"   ou "or"
+# - "aisle_static"   ou "as"
+# - "aisle_adaptive" ou "aa"
+# - "aisle_random"   ou "ar"
+# - "hybrid_random"  ou "hr"
+# - "super_hybrid"   ou "sh" (agora aceita parâmetro opcional de chance de alpha zero, ex: "sh:0.05")
 # Pode ser uma string única ou uma lista de strings. O script testará todas as combinações.
-CONSTRUCTIVES = ["sh"]
+CONSTRUCTIVES = ["sh:0.05"]
 
 # Estratégias de busca local / memético
 # Pode ser uma string única ou uma lista de strings. O script testará todas as combinações.
@@ -130,6 +139,7 @@ def run_benchmark():
         "instance", "run", "strategy", "meta", "constructive", "local_search", 
         "score", "total_iterations", 
         "final_avg_obj", "final_avg_v", "ls_hit_rate_final", "imp_rate_final",
+        "final_v_sat", "final_h_dist",
         "orders_split", "aisles_split",
         "best_known", "gap_percent", "time_seconds", "status"
     ]
@@ -197,10 +207,14 @@ def run_benchmark():
                         o_split = hybrid_match.group(1) if hybrid_match else ""
                         a_split = hybrid_match.group(2) if hybrid_match else ""
 
-                        log_lines = re.findall(r"^\s+\d+\s+\|\s+[\d\.]+\s+\|\s+([\d\.]+)\s+\|\s+([\d\.]+)%\s+\|\s+\d+\s+\|\s+[\d\.]+\s+\|\s+[\d\.]+\s+\|\s+([\d\.]+)\s+\|\s+([\d\.]+)%\s+\|\s+\d+s", stdout, re.MULTILINE)
+                        log_lines = re.findall(r"^\s+\d+\s+\|\s+[\d\.]+\s+\|\s+([\d\.]+)\s+\|\s+([\d\.]+)%\s+\|\s+\d+\s+\|\s+[\d\.]+\s+\|\s+[\d\.]+\s+\|\s+([\d\.]+)\s+\|\s+([\d\.]+)%\s+\|\s+[\d\.]+%\s+\|\s+[\d\.]+%\s+\|\s+\d+s", stdout, re.MULTILINE)
                         final_avg_obj, final_imp_rate, final_avg_v, final_ls_hit = [""] * 4
                         if log_lines:
                             final_avg_obj, final_imp_rate, final_avg_v, final_ls_hit = log_lines[-1]
+
+                        metrics_match = re.search(r"\[BPSO Metrics\] Final Velocity Saturation: ([\d\.]+)% \| Final Diversity \(HDist\): ([\d\.]+)%", stdout)
+                        final_v_sat = metrics_match.group(1) if metrics_match else ""
+                        final_h_dist = metrics_match.group(2) if metrics_match else ""
 
                         # Validar solução
                         is_feasible, score, val_status = validate_solution(input_path, temp_output)
@@ -217,6 +231,7 @@ def run_benchmark():
                             "score": score, "total_iterations": total_iters,
                             "final_avg_obj": final_avg_obj, "final_avg_v": final_avg_v,
                             "ls_hit_rate_final": final_ls_hit, "imp_rate_final": final_imp_rate,
+                            "final_v_sat": final_v_sat, "final_h_dist": final_h_dist,
                             "orders_split": o_split, "aisles_split": a_split,
                             "best_known": best_known, "gap_percent": gap,
                             "time_seconds": elapsed, "status": final_status

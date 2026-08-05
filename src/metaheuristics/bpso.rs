@@ -47,10 +47,6 @@ impl BPSO {
             let mut current_obj = 0.0;
 
             let mut current_new_ac: Vec<usize> = data.order_required_aisles.iter().map(|req| req.len()).collect();
-            let mut aisle_to_orders_req = vec![Vec::new(); data.aisles.len()];
-            for (o_idx, req) in data.order_required_aisles.iter().enumerate() {
-                for &a in req { aisle_to_orders_req[a].push(o_idx); }
-            }
 
             let mut order_indices: Vec<usize> = (0..n_orders).collect();
             order_indices.sort_by(|&a, &b| {
@@ -82,7 +78,7 @@ impl BPSO {
 
                 utils::update_stock_dense(&data.dense_orders[idx], &data.item_to_aisles, &mut available_stock, &sol.aisles, data.n_items);
                 for &a in &newly_added_aisles {
-                    for &o_idx in &aisle_to_orders_req[a] { current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1); }
+                    for &o_idx in &data.aisle_to_orders_req[a] { current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1); }
                 }
                 current_obj = curr_items as f64 / sol.aisles.count_ones(..) as f64;
             }
@@ -111,11 +107,7 @@ impl BPSO {
                     total_curr_stock[item.id] += item.qty;
                 }
 
-                let mut order_indices: Vec<usize> = (0..n_orders).collect();
-                // Aqui não temos scores de pedidos, então usamos uma métrica de preenchimento simples
-                order_indices.sort_by(|&a, &b| data.order_total_items[b].cmp(&data.order_total_items[a]));
-
-                for &oid in &order_indices {
+                for &oid in &data.orders_sorted_by_size {
                     if sol.orders.contains(oid) { continue; }
                     let oqty = data.order_total_items[oid];
                     if total_items + oqty > data.wave_size_ub { continue; }
@@ -175,14 +167,17 @@ impl SolverStrategy for BPSO {
         let n_orders_particles = particles.iter().filter(|p| p.dimension == SearchDimension::Orders).count();
         let n_aisles_particles = particles.len() - n_orders_particles;
 
-        println!("  {:<6} | {:<10} | {:<8} | {:<5} | {:<4} | {:<4} | {:<5} | {:<5} | {:<5} | {:<4}", 
-                 "Iter", "Best Obj", "Avg Obj", "Imp%", "Stag", "w", "Turb", "AvgV", "LSHit", "Time");
+        println!("  {:<6} | {:<10} | {:<8} | {:<5} | {:<4} | {:<4} | {:<4} | {:<5} | {:<5} | {:<5} | {:<5} | {:<4}", 
+                 "Iter", "Best Obj", "Avg Obj", "Imp%", "Stag", "w", "Turb", "AvgV", "LSHit", "VSat%", "HDst%", "Time");
         if self.config.dimension == BpsoDimension::Hybrid {
             println!("  [Hybrid Mode: {} Orders / {} Aisles]", n_orders_particles, n_aisles_particles);
         }
         println!("  {}", "-".repeat(95));
 
         let mut final_iterations = 0;
+        let mut final_v_sat = 0.0;
+        let mut final_h_dist = 0.0;
+
         for iter in 0..self.config.iterations {
             final_iterations = iter + 1;
             if start.elapsed() >= max_dur { break; }
@@ -215,12 +210,14 @@ impl SolverStrategy for BPSO {
             let gbest_v_aisles = Self::solution_to_vec(&gbest_s, SearchDimension::Aisles, n_aisles);
 
             // Parallel computation of movement and stats
-            let stats: (usize, f64, usize, usize) = particles.par_iter_mut().enumerate().map(|(i, p)| {
+            let stats: (usize, f64, usize, usize, usize, usize, usize) = particles.par_iter_mut().enumerate().map(|(i, p)| {
                 let mut lrng = ChaCha8Rng::seed_from_u64(base + i as u64);
                 let n = p.velocity.len();
                 let gbest_v = if p.dimension == SearchDimension::Orders { &gbest_v_orders } else { &gbest_v_aisles };
                 let mut scores = vec![0.0; n];
                 let mut v_sum = 0.0;
+                let mut v_sat_count = 0;
+                let mut h_dist_count = 0;
 
                 for j in 0..n {
                     let r1 = lrng.random::<f64>(); let r2 = lrng.random::<f64>();
@@ -229,6 +226,8 @@ impl SolverStrategy for BPSO {
                     p.velocity[j] = w * p.velocity[j] + cog + soc;
                     p.velocity[j] = p.velocity[j].clamp(-self.config.v_max, self.config.v_max);
                     v_sum += p.velocity[j].abs();
+                    if p.velocity[j].abs() >= self.config.v_max * 0.95 { v_sat_count += 1; }
+                    if p.position[j] != gbest_v[j] { h_dist_count += 1; }
                     scores[j] = Self::sigmoid(p.velocity[j]);
                 }
                 
@@ -259,13 +258,22 @@ impl SolverStrategy for BPSO {
                     p.best_fitness = f; p.best_position = p.position.clone(); p.best_solution = p.current_solution.clone();
                     improved = 1;
                 }
-                (improved, v_sum / n as f64, ls_attempt, ls_hit)
-            }).reduce(|| (0, 0.0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3));
+                (improved, v_sum / n as f64, ls_attempt, ls_hit, v_sat_count, h_dist_count, n)
+            }).reduce(|| (0, 0.0, 0, 0, 0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3, a.4 + b.4, a.5 + b.5, a.6 + b.6));
 
             let improvements = stats.0;
             let avg_v = stats.1 / particles.len() as f64;
             let ls_attempts = stats.2;
             let ls_hits = stats.3;
+            let total_sat = stats.4;
+            let total_h_dist = stats.5;
+            let total_bits = stats.6;
+
+            let avg_sat_percent = if total_bits > 0 { (total_sat as f64 / total_bits as f64) * 100.0 } else { 0.0 };
+            let avg_h_dist_percent = if total_bits > 0 { (total_h_dist as f64 / total_bits as f64) * 100.0 } else { 0.0 };
+            
+            final_v_sat = avg_sat_percent;
+            final_h_dist = avg_h_dist_percent;
 
             let avg_fitness: f64 = particles.iter().map(|p| p.best_fitness).sum::<f64>() / particles.len() as f64;
             let imp_percent = (improvements as f64 / particles.len() as f64) * 100.0;
@@ -281,12 +289,13 @@ impl SolverStrategy for BPSO {
 
             if improved { stagnation_count = 0; } else { stagnation_count += 1; }
             if iter % self.config.log_frequency == 0 || improved {
-                println!("  {:<6} | {:<10.4} | {:<8.4} | {:>4.1}% | {:<4} | {:<4.2} | {:<5.2} | {:<5.2} | {:>4.1}% | {:>3}s", 
-                         iter, gbest_f, avg_fitness, imp_percent, stagnation_count, w, turbulence_chance, avg_v, ls_hit_rate, start.elapsed().as_secs());
+                println!("  {:<6} | {:<10.4} | {:<8.4} | {:>4.1}% | {:<4} | {:<4.2} | {:<4.2} | {:<5.2} | {:>4.1}% | {:>4.1}% | {:>4.1}% | {:>3}s", 
+                         iter, gbest_f, avg_fitness, imp_percent, stagnation_count, w, turbulence_chance, avg_v, ls_hit_rate, avg_sat_percent, avg_h_dist_percent, start.elapsed().as_secs());
             }
         }
-        println!("  {}", "-".repeat(95));
+        println!("  {}", "-".repeat(110));
         println!("  [BPSO] Finished in {} iterations. Best Obj: {:.4}", final_iterations, gbest_f);
+        println!("  [BPSO Metrics] Final Velocity Saturation: {:.2}% | Final Diversity (HDist): {:.2}%", final_v_sat, final_h_dist);
         gbest_s
     }
 }

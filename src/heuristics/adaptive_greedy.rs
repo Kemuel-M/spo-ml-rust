@@ -19,13 +19,6 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
             .map(|req| req.len())
             .collect();
 
-        let mut aisle_to_orders_req = vec![Vec::new(); data.aisles.len()];
-        for (o_idx, req) in data.order_required_aisles.iter().enumerate() {
-            for &a in req {
-                aisle_to_orders_req[a].push(o_idx);
-            }
-        }
-
         while curr_items < data.wave_size_ub {
             let mut best_candidate = None;
             let mut max_score = -1.0;
@@ -74,7 +67,7 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
                 utils::update_stock_dense(&data.dense_orders[idx], &data.item_to_aisles, &mut available_stock, &solution.aisles, data.n_items);
                 
                 for &a in &newly_added_aisles {
-                    for &o_idx in &aisle_to_orders_req[a] {
+                    for &o_idx in &data.aisle_to_orders_req[a] {
                          current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1);
                     }
                 }

@@ -107,6 +107,13 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
         order_required_aisles.push(req);
     }
 
+    let mut aisle_to_orders_req = vec![Vec::new(); n_aisles];
+    for (o_idx, req) in order_required_aisles.iter().enumerate() {
+        for &a in req {
+            aisle_to_orders_req[a].push(o_idx);
+        }
+    }
+
     Ok(ProblemData {
         orders,
         aisles,
@@ -121,6 +128,7 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
         stock_matrix,
         item_locations_bits,
         order_required_aisles: Arc::new(order_required_aisles),
+        aisle_to_orders_req: Arc::new(aisle_to_orders_req),
     })
 }
 

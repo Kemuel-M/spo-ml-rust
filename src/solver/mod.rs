@@ -63,7 +63,7 @@ impl<'a> ChallengeSolver<'a> {
             ConstructiveType::AisleAdaptive => Box::new(crate::heuristics::aisle_centric_adaptive::AisleCentricAdaptive),
             ConstructiveType::AisleRandom => Box::new(crate::heuristics::aisle_centric_random::AisleCentricRandom { alpha: 0.1 }),
             ConstructiveType::Hybrid => Box::new(crate::heuristics::hybrid_random::HybridRandom::new(0.1)),
-            ConstructiveType::SuperHybrid => Box::new(crate::heuristics::super_hybrid::SuperHybrid::new()),
+            ConstructiveType::SuperHybrid { p_zero_alpha } => Box::new(crate::heuristics::super_hybrid::SuperHybrid::new(p_zero_alpha)),
         };
 
         let raw_local_search: Box<dyn LocalSearchAlgorithm> = match ls_type {

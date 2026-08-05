@@ -23,8 +23,6 @@ impl ConstructiveAlgorithm for AisleCentricStatic {
             sb.cmp(&sa)
         });
 
-        let mut candidates_sorted = (0..n_orders).collect::<Vec<usize>>();
-        candidates_sorted.sort_by(|&a, &b| data.order_total_items[b].cmp(&data.order_total_items[a]));
 
         for &aid in &all_aisles {
             if total_items >= data.wave_size_ub { break; }
@@ -36,7 +34,7 @@ impl ConstructiveAlgorithm for AisleCentricStatic {
             }
 
             let mut to_add = Vec::new();
-            for &oid in &candidates_sorted {
+            for &oid in &data.orders_sorted_by_size {
                 if !unselected[oid] { continue; }
                 let oqty = data.order_total_items[oid];
                 if total_items + oqty > data.wave_size_ub { continue; }

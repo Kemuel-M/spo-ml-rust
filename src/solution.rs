@@ -27,6 +27,7 @@ pub struct ProblemData {
     pub stock_matrix: Vec<u32>,                // Acesso rápido: [aisle_idx * n_items + item_id]
     pub item_locations_bits: Vec<FixedBitSet>, // Acesso rápido: item_id -> bitset de corredores
     pub order_required_aisles: Arc<Vec<Vec<usize>>>,
+    pub aisle_to_orders_req: Arc<Vec<Vec<usize>>>,
 }
 
 #[derive(Debug, Clone)]

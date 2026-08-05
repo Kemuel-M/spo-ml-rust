@@ -12,9 +12,9 @@ pub struct SuperHybrid {
 }
 
 impl SuperHybrid {
-    pub fn new() -> Self {
+    pub fn new(p_zero_alpha: f64) -> Self {
         Self {
-            p_zero_alpha: 0.10, // 10% de chance de alpha = 0.0
+            p_zero_alpha, // 10% padrão agora vem por parâmetro
             p_orders: 0.40,     // 40% de chance de focar em Pedidos (60% para Corredores)
         }
     }

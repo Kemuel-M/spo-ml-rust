@@ -287,7 +287,7 @@ pub enum ConstructiveType {
     AisleAdaptive,
     AisleRandom,
     Hybrid,
-    SuperHybrid,
+    SuperHybrid { p_zero_alpha: f64 },
 }
 
 #[derive(Debug, Clone)]
@@ -323,7 +323,8 @@ impl std::str::FromStr for ConstructiveType {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let name = s.split(':').next().unwrap_or("order_static");
+        let parts: Vec<&str> = s.split(':').collect();
+        let name = *parts.first().unwrap_or(&"order_static");
         Ok(match name {
             "order_static" | "os" => ConstructiveType::OrderStatic,
             "order_adaptive" | "oa" => ConstructiveType::OrderAdaptive,
@@ -332,7 +333,10 @@ impl std::str::FromStr for ConstructiveType {
             "aisle_adaptive" | "aa" => ConstructiveType::AisleAdaptive,
             "aisle_random" | "ar" => ConstructiveType::AisleRandom,
             "hybrid_random" | "hr" => ConstructiveType::Hybrid,
-            "super_hybrid" | "sh" => ConstructiveType::SuperHybrid,
+            "super_hybrid" | "sh" => {
+                let p_zero = parts.get(1).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.10);
+                ConstructiveType::SuperHybrid { p_zero_alpha: p_zero }
+            },
             _ => ConstructiveType::OrderStatic,
         })
     }
