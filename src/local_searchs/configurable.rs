@@ -81,9 +81,7 @@ impl ConfigurableLocalSearch {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         moves.shuffle(&mut rng);
 
-        let t_start_inner = std::time::Instant::now();
         for mv in moves {
-            if t_start_inner.elapsed().as_secs() > 1 { break; }
             if evaluator.validate_move(&mv, data) {
                 if self.apply_move(evaluator, solution, data, mv, current_obj) {
                     trace!("    Melhoria encontrada: {:.4} via {:?}", evaluator.current_objective(), mv);
