@@ -196,6 +196,7 @@ impl Evaluator for StockBalanceEvaluator {
     }
 
     fn validate_move(&mut self, mv: &Move, data: &ProblemData) -> bool {
+        
         // Lookahead para movimentos destrutivos que não dependem de reparo
         match *mv {
             Move::OrderInsertion(i) => {
@@ -216,7 +217,9 @@ impl Evaluator for StockBalanceEvaluator {
             Move::AisleRemoval(o) => self.try_apply_aisle_remove(o, data),
         }
         let ok = self.is_stock_valid() && self.total_items >= self.wave_size_lb && self.total_items <= self.wave_size_ub;
-        self.rollback(); ok
+        self.rollback(); 
+
+        ok
     }
     fn clone_box(&self) -> Box<dyn Evaluator> { Box::new(self.clone()) }
 }
