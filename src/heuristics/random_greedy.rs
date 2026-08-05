@@ -31,9 +31,11 @@ impl ConstructiveAlgorithm for RandomGreedy {
 
 
         let mut unselected: Vec<usize> = (0..n_orders).collect();
+        let mut unopened_req = Vec::with_capacity(32);
+        let mut candidates = Vec::with_capacity(n_orders);
 
         while curr_items < data.wave_size_ub {
-            let mut candidates = Vec::new();
+            candidates.clear();
             let best_obj = current_obj;
 
             for &idx in &unselected {
@@ -41,13 +43,17 @@ impl ConstructiveAlgorithm for RandomGreedy {
                 if curr_items + total > data.wave_size_ub { continue; }
                 
                 let req = &data.order_required_aisles[idx];
+                
+                unopened_req.clear();
+                for &a in req {
+                    if !solution.aisles.contains(a) { unopened_req.push(a); }
+                }
+                
                 let mut can_fulfill = true;
                 for item in &data.dense_orders[idx] {
                     let mut stock_we_will_have = surplus_stock[item.id];
-                    for &a in req {
-                        if !solution.aisles.contains(a) {
-                            stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
-                        }
+                    for &a in &unopened_req {
+                        stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
                     }
                     if stock_we_will_have < item.qty {
                         can_fulfill = false;

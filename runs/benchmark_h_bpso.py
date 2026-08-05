@@ -23,7 +23,7 @@ TIMEOUT_LIMIT = 600         # Tempo máximo por instância em segundos (PASSADO 
 # Nota: Este parâmetro é ignorado caso SELECTED_INSTANCES não esteja vazia.
 MAX_INSTANCES = 0           
 
-RUNS_PER_INSTANCE = 10      # Quantidade de vezes que cada instância será executada
+RUNS_PER_INSTANCE = 1      # Quantidade de vezes que cada instância será executada
 
 # --- Parâmetros da Meta-heurística ---
 # Meta-heurística base

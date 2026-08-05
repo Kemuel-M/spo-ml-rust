@@ -54,18 +54,22 @@ impl BPSO {
                 scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
             });
 
+            let mut unopened_req = Vec::with_capacity(32);
             for &idx in &order_indices {
                 if curr_items >= data.wave_size_ub { break; }
                 let total = data.order_total_items[idx];
                 if curr_items + total > data.wave_size_ub { continue; }
 
+                unopened_req.clear();
+                for &a in &data.order_required_aisles[idx] {
+                    if !sol.aisles.contains(a) { unopened_req.push(a); }
+                }
+                
                 let mut can_fulfill = true;
                 for item in &data.dense_orders[idx] {
                     let mut stock_we_will_have = surplus_stock[item.id];
-                    for &a in &data.order_required_aisles[idx] {
-                        if !sol.aisles.contains(a) {
-                            stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
-                        }
+                    for &a in &unopened_req {
+                        stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
                     }
                     if stock_we_will_have < item.qty {
                         can_fulfill = false;

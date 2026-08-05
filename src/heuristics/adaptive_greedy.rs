@@ -18,6 +18,8 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
             .map(|req| req.len())
             .collect();
 
+        let mut unopened_req = Vec::with_capacity(32);
+
         while curr_items < data.wave_size_ub {
             let mut best_candidate = None;
             let mut max_score = -1.0;
@@ -38,13 +40,17 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
                 // because we iterate idx from 0 to n_orders.
                 if score > max_score {
                     let req = &data.order_required_aisles[idx];
+                    
+                    unopened_req.clear();
+                    for &a in req {
+                        if !solution.aisles.contains(a) { unopened_req.push(a); }
+                    }
+                    
                     let mut can_fulfill = true;
                     for item in &data.dense_orders[idx] {
                         let mut stock_we_will_have = surplus_stock[item.id];
-                        for &a in req {
-                            if !solution.aisles.contains(a) {
-                                stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
-                            }
+                        for &a in &unopened_req {
+                            stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
                         }
                         if stock_we_will_have < item.qty {
                             can_fulfill = false;

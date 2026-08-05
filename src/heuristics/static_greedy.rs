@@ -25,17 +25,22 @@ impl ConstructiveAlgorithm for StaticGreedy {
         let mut best_obj = 0.0;
         let mut surplus_stock = vec![0u32; data.n_items];
 
+        let mut unopened_req = Vec::with_capacity(32);
         for (idx, _) in scored_orders {
             let total = data.order_total_items[idx];
             if curr_items + total > data.wave_size_ub { continue; }
             let req = &data.order_required_aisles[idx];
+            
+            unopened_req.clear();
+            for &a in req {
+                if !solution.aisles.contains(a) { unopened_req.push(a); }
+            }
+            
             let mut can_fulfill = true;
             for item in &data.dense_orders[idx] {
                 let mut stock_we_will_have = surplus_stock[item.id];
-                for &a in req {
-                    if !solution.aisles.contains(a) {
-                        stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
-                    }
+                for &a in &unopened_req {
+                    stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
                 }
                 if stock_we_will_have < item.qty {
                     can_fulfill = false;
