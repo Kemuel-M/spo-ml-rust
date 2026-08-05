@@ -12,7 +12,6 @@ impl ConstructiveAlgorithm for AisleCentricStatic {
         let mut best_sol = ChallengeSolution::new(n_orders, data.aisles.len());
         let mut best_score = 0.0;
         let mut unselected = vec![true; n_orders];
-        let mut curr_stock = vec![0u32; data.aisles.len() * data.n_items];
         let mut total_curr_stock = vec![0u32; data.n_items];
         let mut total_items = 0;
 
@@ -29,7 +28,6 @@ impl ConstructiveAlgorithm for AisleCentricStatic {
             curr_sol.aisles.insert(aid);
             
             for item in &data.dense_aisles[aid] {
-                curr_stock[aid * data.n_items + item.id] = item.qty;
                 total_curr_stock[item.id] += item.qty;
             }
 
@@ -49,15 +47,7 @@ impl ConstructiveAlgorithm for AisleCentricStatic {
 
                 if can {
                     for item in &data.dense_orders[oid] {
-                        let mut rem = item.qty;
                         total_curr_stock[item.id] -= item.qty;
-                        for aidx in curr_sol.aisles.ones() {
-                            if rem == 0 { break; }
-                            let s = &mut curr_stock[aidx * data.n_items + item.id];
-                            let take = std::cmp::min(rem, *s);
-                            *s -= take;
-                            rem -= take;
-                        }
                     }
                     to_add.push(oid);
                     total_items += oqty;

@@ -89,7 +89,6 @@ impl BPSO {
         } else {
             // Aisle-Centric Guided Construct
             let mut sol = ChallengeSolution::new(n_orders, data.aisles.len());
-            let mut curr_stock = vec![0u32; data.aisles.len() * data.n_items];
             let mut total_curr_stock = vec![0u32; data.n_items];
             let mut total_items = 0;
             
@@ -104,7 +103,6 @@ impl BPSO {
 
                 sol.aisles.insert(aid);
                 for item in &data.dense_aisles[aid] {
-                    curr_stock[aid * data.n_items + item.id] = item.qty;
                     total_curr_stock[item.id] += item.qty;
                 }
 

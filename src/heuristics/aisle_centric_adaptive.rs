@@ -14,7 +14,6 @@ impl ConstructiveAlgorithm for AisleCentricAdaptive {
         let mut unselected = vec![true; n_orders];
         let mut available_aisles: Vec<usize> = (0..data.aisles.len()).collect();
         
-        let mut curr_stock = vec![0u32; data.aisles.len() * data.n_items];
         let mut total_curr_stock = vec![0u32; data.n_items];
         let mut total_items = 0;
 
@@ -53,7 +52,6 @@ impl ConstructiveAlgorithm for AisleCentricAdaptive {
             curr_sol.aisles.insert(next_aid);
             
             for item in &data.dense_aisles[next_aid] {
-                curr_stock[next_aid * data.n_items + item.id] = item.qty;
                 total_curr_stock[item.id] += item.qty;
             }
 
@@ -73,15 +71,7 @@ impl ConstructiveAlgorithm for AisleCentricAdaptive {
                 
                 if can {
                     for item in &data.dense_orders[oid] {
-                        let mut rem = item.qty;
                         total_curr_stock[item.id] -= item.qty;
-                        for aidx in curr_sol.aisles.ones() {
-                            if rem == 0 { break; }
-                            let s = &mut curr_stock[aidx * data.n_items + item.id];
-                            let take = std::cmp::min(rem, *s);
-                            *s -= take;
-                            rem -= take;
-                        }
                         pending_demand[item.id] = pending_demand[item.id].saturating_sub(item.qty);
                     }
                     to_add.push(oid);

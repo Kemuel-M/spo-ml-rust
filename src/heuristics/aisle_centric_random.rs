@@ -22,8 +22,6 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
         let mut best_score = 0.0;
         let mut unselected: HashSet<usize> = (0..n_orders).collect();
         let mut available_aisles: HashSet<usize> = (0..data.aisles.len()).collect();
-        
-        let mut curr_stock = vec![0u32; data.aisles.len() * data.n_items];
         let mut total_curr_stock = vec![0u32; data.n_items];
         let mut total_items = 0;
 
@@ -59,7 +57,6 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
             curr_sol.aisles.insert(next_aid);
             
             for item in &data.dense_aisles[next_aid] {
-                curr_stock[next_aid * data.n_items + item.id] = item.qty;
                 total_curr_stock[item.id] += item.qty;
             }
 
@@ -106,15 +103,7 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
 
                 // Deduz o estoque do pedido escolhido
                 for item in &data.dense_orders[chosen_oid] {
-                    let mut rem = item.qty;
                     total_curr_stock[item.id] -= item.qty;
-                    for aidx in curr_sol.aisles.ones() {
-                        if rem == 0 { break; }
-                        let s = &mut curr_stock[aidx * data.n_items + item.id];
-                        let take = std::cmp::min(rem, *s);
-                        *s -= take;
-                        rem -= take;
-                    }
                     pending_demand[item.id] = pending_demand[item.id].saturating_sub(item.qty);
                 }
 
