@@ -43,7 +43,7 @@ impl BPSO {
         let n_orders = data.orders.len();
         if dim == SearchDimension::Orders {
             let mut sol = ChallengeSolution::new(n_orders, data.aisles.len());
-            let mut available_stock = data.stock_matrix.clone();
+            let mut surplus_stock = vec![0u32; data.n_items];
             let mut curr_items = 0;
             let mut current_obj = 0.0;
 
@@ -59,9 +59,20 @@ impl BPSO {
                 let total = data.order_total_items[idx];
                 if curr_items + total > data.wave_size_ub { continue; }
 
-                if !utils::is_stock_sufficient_dense(&data.dense_orders[idx], &data.order_required_aisles[idx], &available_stock, data.n_items) {
-                    continue;
+                let mut can_fulfill = true;
+                for item in &data.dense_orders[idx] {
+                    let mut stock_we_will_have = surplus_stock[item.id];
+                    for &a in &data.order_required_aisles[idx] {
+                        if !sol.aisles.contains(a) {
+                            stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
+                        }
+                    }
+                    if stock_we_will_have < item.qty {
+                        can_fulfill = false;
+                        break;
+                    }
                 }
+                if !can_fulfill { continue; }
 
                 if curr_items >= data.wave_size_lb {
                     let new_ac_count = current_new_ac[idx];
@@ -74,10 +85,18 @@ impl BPSO {
                 curr_items += total;
                 let mut newly_added_aisles = Vec::new();
                 for &a in &data.order_required_aisles[idx] {
-                    if !sol.aisles.contains(a) { sol.aisles.insert(a); newly_added_aisles.push(a); }
+                    if !sol.aisles.contains(a) { 
+                        sol.aisles.insert(a); 
+                        newly_added_aisles.push(a); 
+                        for item in &data.dense_aisles[a] {
+                            surplus_stock[item.id] += item.qty;
+                        }
+                    }
                 }
 
-                utils::update_stock_dense(&data.dense_orders[idx], &data.item_to_aisles, &mut available_stock, &sol.aisles, data.n_items);
+                for item in &data.dense_orders[idx] {
+                    surplus_stock[item.id] -= item.qty;
+                }
                 for &a in &newly_added_aisles {
                     for &o_idx in &data.aisle_to_orders_req[a] { current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1); }
                 }

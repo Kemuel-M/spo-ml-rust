@@ -1,6 +1,5 @@
 use crate::solution::{ChallengeSolution, ProblemData};
 use super::ConstructiveAlgorithm;
-use super::utils;
 
 pub struct AdaptiveGreedy;
 
@@ -10,7 +9,7 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
     fn construct(&self, data: &ProblemData, _seed: u64) -> ChallengeSolution {
         let n_orders = data.orders.len();
         let mut solution = ChallengeSolution::new(n_orders, data.aisles.len());
-        let mut available_stock = data.stock_matrix.clone();
+        let mut surplus_stock = vec![0u32; data.n_items];
         let mut curr_items = 0;
         let mut best_obj = 0.0;
         let mut unselected = vec![true; n_orders];
@@ -39,7 +38,21 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
                 // because we iterate idx from 0 to n_orders.
                 if score > max_score {
                     let req = &data.order_required_aisles[idx];
-                    if utils::is_stock_sufficient_dense(&data.dense_orders[idx], req, &available_stock, data.n_items) {
+                    let mut can_fulfill = true;
+                    for item in &data.dense_orders[idx] {
+                        let mut stock_we_will_have = surplus_stock[item.id];
+                        for &a in req {
+                            if !solution.aisles.contains(a) {
+                                stock_we_will_have += data.stock_matrix[a * data.n_items + item.id];
+                            }
+                        }
+                        if stock_we_will_have < item.qty {
+                            can_fulfill = false;
+                            break;
+                        }
+                    }
+                    
+                    if can_fulfill {
                         if curr_items >= data.wave_size_lb {
                             let total_ac = solution.aisles.count_ones(..) + new_ac;
                             let new_obj = (curr_items + total) as f64 / total_ac as f64;
@@ -61,10 +74,15 @@ impl ConstructiveAlgorithm for AdaptiveGreedy {
                     if !solution.aisles.contains(a) {
                         solution.aisles.insert(a);
                         newly_added_aisles.push(a);
+                        for item in &data.dense_aisles[a] {
+                            surplus_stock[item.id] += item.qty;
+                        }
                     }
                 }
                 
-                utils::update_stock_dense(&data.dense_orders[idx], &data.item_to_aisles, &mut available_stock, &solution.aisles, data.n_items);
+                for item in &data.dense_orders[idx] {
+                    surplus_stock[item.id] -= item.qty;
+                }
                 
                 for &a in &newly_added_aisles {
                     for &o_idx in &data.aisle_to_orders_req[a] {
