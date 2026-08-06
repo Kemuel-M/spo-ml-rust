@@ -32,7 +32,6 @@ struct Particle {
     best_fitness: f64, best_solution: ChallengeSolution, current_solution: ChallengeSolution,
     rng: ChaCha8Rng,
     scores_buffer: Vec<f64>,
-    indices_buffer: Vec<usize>,
 }
 
 impl BPSO {
@@ -66,7 +65,7 @@ impl SolverStrategy for BPSO {
             let p = Self::solution_to_vec(&s, dim, n); 
             let mut v = vec![0.0; n];
             for val in v.iter_mut() { *val = rng.random_range(-self.config.v_max..self.config.v_max); }
-            Particle { dimension: dim, position: p.clone(), velocity: v, best_position: p, best_fitness: f, best_solution: s.clone(), current_solution: s, rng, scores_buffer: vec![0.0; n], indices_buffer: Vec::with_capacity(n_orders.max(n_aisles)) }
+            Particle { dimension: dim, position: p.clone(), velocity: v, best_position: p, best_fitness: f, best_solution: s.clone(), current_solution: s, rng, scores_buffer: vec![0.0; n] }
         }).collect();
 
         let mut gbest_f = -1.0; 
