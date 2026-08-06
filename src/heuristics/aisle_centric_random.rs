@@ -14,7 +14,7 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
         Some(Box::new(AisleCentricRandom { alpha }))
     }
 
-    fn construct(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
+    fn construct(&self, data: &ProblemData, seed: u64, weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let n_orders = data.orders.len();
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let mut curr_sol = ChallengeSolution::new(n_orders, data.aisles.len());
@@ -24,6 +24,9 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
         let mut available_aisles: HashSet<usize> = (0..data.aisles.len()).collect();
         let mut total_curr_stock = vec![0u32; data.n_items];
         let mut total_items = 0;
+
+        let aisle_weights = if let Some((w, crate::local_searchs::SearchDimension::Aisles)) = weights { Some(w) } else { None };
+        let order_weights = if let Some((w, crate::local_searchs::SearchDimension::Orders)) = weights { Some(w) } else { None };
 
         let mut pending_demand = vec![0u32; data.n_items];
         for oid in 0..n_orders {
@@ -41,7 +44,9 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
                 for item in &data.dense_aisles[aid] {
                     useful += std::cmp::min(item.qty, pending_demand[item.id]);
                 }
-                candidates.push((aid, useful as f64));
+                let base_score = useful as f64;
+                let score = if let Some(w) = aisle_weights { base_score * w[aid] } else { base_score };
+                candidates.push((aid, score));
             }
             
             if candidates.is_empty() { break; }
@@ -62,8 +67,6 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
 
             let mut to_add = Vec::new();
             
-            // Em vez de percorrer uma lista estática, preenchemos a onda iterativamente 
-            // usando uma abordagem GRASP para os pedidos também.
             let mut candidates_orders = Vec::new();
             for &oid in &unselected {
                 let mut can_fulfill = true;
@@ -86,14 +89,20 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
                     break;
                 }
 
-                let (min_s, max_s) = candidates_orders.iter()
-                    .map(|&oid| data.order_total_items[oid] as f64)
-                    .fold((f64::MAX, f64::MIN), |(min, max), s| (min.min(s), max.max(s)));
+                let scored_orders: Vec<(usize, f64)> = candidates_orders.iter()
+                    .map(|&oid| {
+                        let base_score = data.order_total_items[oid] as f64;
+                        let score = if let Some(w) = order_weights { base_score * w[oid] } else { base_score };
+                        (oid, score)
+                    }).collect();
+
+                let (min_s, max_s) = scored_orders.iter()
+                    .fold((f64::MAX, f64::MIN), |(min, max), &(_, s)| (min.min(s), max.max(s)));
                 
                 let threshold = max_s - self.alpha * (max_s - min_s);
-                let rcl: Vec<usize> = candidates_orders.iter()
-                    .filter(|&&oid| data.order_total_items[oid] as f64 >= threshold)
-                    .copied()
+                let rcl: Vec<usize> = scored_orders.into_iter()
+                    .filter(|&(_, s)| s >= threshold)
+                    .map(|(oid, _)| oid)
                     .collect();
 
                 let chosen_oid = *rcl.choose(&mut rng).unwrap();

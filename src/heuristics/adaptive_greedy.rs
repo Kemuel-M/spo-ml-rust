@@ -6,7 +6,7 @@ pub struct AdaptiveGreedy;
 impl ConstructiveAlgorithm for AdaptiveGreedy {
     fn name(&self) -> String { "Adaptive Greedy".to_string() }
 
-    fn construct(&self, data: &ProblemData, _seed: u64) -> ChallengeSolution {
+    fn construct(&self, data: &ProblemData, _seed: u64, _weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let n_orders = data.orders.len();
         let mut solution = ChallengeSolution::new(n_orders, data.aisles.len());
         

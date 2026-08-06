@@ -6,7 +6,7 @@ pub struct StaticGreedy;
 impl ConstructiveAlgorithm for StaticGreedy {
     fn name(&self) -> String { "Static Greedy".to_string() }
 
-    fn construct(&self, data: &ProblemData, _seed: u64) -> ChallengeSolution {
+    fn construct(&self, data: &ProblemData, _seed: u64, _weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let mut scored_orders = Vec::new();
         for idx in 0..data.orders.len() {
             let total = data.order_total_items[idx];

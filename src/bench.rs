@@ -9,7 +9,7 @@ fn main() {
     let start = Instant::now();
     for i in 0..10 {
         let s = Instant::now();
-        let sol = sh.construct(&data, i as u64);
+        let sol = sh.construct(&data, i as u64, None);
         println!("Iter {}, score = {:.4}, time = {:?}", i, sol.score, s.elapsed());
     }
     println!("Time: {:?}", start.elapsed());

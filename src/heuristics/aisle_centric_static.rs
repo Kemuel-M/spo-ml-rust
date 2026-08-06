@@ -6,7 +6,7 @@ pub struct AisleCentricStatic;
 impl ConstructiveAlgorithm for AisleCentricStatic {
     fn name(&self) -> String { "AisleCentric (Static)".to_string() }
 
-    fn construct(&self, data: &ProblemData, _seed: u64) -> ChallengeSolution {
+    fn construct(&self, data: &ProblemData, _seed: u64, _weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let n_orders = data.orders.len();
         let mut curr_sol = ChallengeSolution::new(n_orders, data.aisles.len());
         let mut best_sol = ChallengeSolution::new(n_orders, data.aisles.len());

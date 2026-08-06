@@ -19,6 +19,7 @@ pub struct StockBalanceEvaluator {
     violating_items: FixedBitSet,
     pub wave_size_lb: u32,
     pub wave_size_ub: u32,
+    pub prune_active: bool,
     
     // Estado para Rollback
     last_orders: FixedBitSet,
@@ -47,6 +48,7 @@ impl StockBalanceEvaluator {
             orders: solution.orders.clone(), aisles: solution.aisles.clone(), total_items,
             stock, violations: v, violating_items: vit,
             wave_size_lb: data.wave_size_lb, wave_size_ub: data.wave_size_ub,
+            prune_active: true,
             last_orders: solution.orders.clone(), last_aisles: solution.aisles.clone(),
             last_total_items: total_items, last_violations: v,
             last_violating_items: FixedBitSet::with_capacity(n_items), 
@@ -175,10 +177,12 @@ impl Evaluator for StockBalanceEvaluator {
             }
             if let Some(a_idx) = best_aisle { self.update_aisle(a_idx, true, data); self.aisles.insert(a_idx); } else { break; }
         }
-        let active: Vec<usize> = self.aisles.ones().collect();
-        for a_idx in active {
-            if self.stock.can_remove_aisle_safely(a_idx, data) {
-                self.update_aisle(a_idx, false, data); self.aisles.remove(a_idx);
+        if self.prune_active {
+            let active: Vec<usize> = self.aisles.ones().collect();
+            for a_idx in active {
+                if self.stock.can_remove_aisle_safely(a_idx, data) {
+                    self.update_aisle(a_idx, false, data); self.aisles.remove(a_idx);
+                }
             }
         }
     }
@@ -196,19 +200,14 @@ impl Evaluator for StockBalanceEvaluator {
     }
 
     fn validate_move(&mut self, mv: &Move, data: &ProblemData) -> bool {
-        
-        // Lookahead para movimentos destrutivos que não dependem de reparo
         match *mv {
-            Move::OrderInsertion(i) => {
-                if self.total_items + data.order_total_items[i] > self.wave_size_ub {
-                    return false;
-                }
-            },
-            Move::OrderSwap(o, i) => {
-                if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub {
-                    return false;
-                }
-            },
+            Move::OrderInsertion(i) => if self.total_items + data.order_total_items[i] > self.wave_size_ub { return false; },
+            Move::OrderSwap(o, i) => if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub { return false; },
+            Move::OrderRemoval(o) => if self.total_items < data.order_total_items[o] + self.wave_size_lb { return false; },
+            _ => {}
+        }
+        match *mv {
+            Move::OrderSwap(o, i) => { if self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return false; } },
             _ => {}
         }
         
@@ -222,8 +221,80 @@ impl Evaluator for StockBalanceEvaluator {
         }
         let ok = self.is_stock_valid() && self.total_items >= self.wave_size_lb && self.total_items <= self.wave_size_ub;
         self.rollback(); 
-
         ok
     }
+    
+    fn test_move(&mut self, mv: &Move, data: &ProblemData) -> Option<f64> {
+        match *mv {
+            Move::OrderInsertion(i) => if self.total_items + data.order_total_items[i] > self.wave_size_ub { return None; },
+            Move::OrderSwap(o, i) => if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub { return None; },
+            Move::OrderRemoval(o) => if self.total_items < data.order_total_items[o] + self.wave_size_lb { return None; },
+            _ => {}
+        }
+        match *mv {
+            Move::OrderSwap(o, i) => { if self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return None; } },
+            _ => {}
+        }
+
+        match *mv {
+            Move::OrderSwap(o, i) => self.try_apply_order_swap(o, i, data),
+            Move::OrderInsertion(i) => self.try_apply_order_add(i, data),
+            Move::OrderRemoval(o) => self.try_apply_order_remove(o, data),
+            Move::AisleSwap(o, i) => self.try_apply_aisle_swap(o, i, data),
+            Move::AisleInsertion(i) => self.try_apply_aisle_add(i, data),
+            Move::AisleRemoval(o) => self.try_apply_aisle_remove(o, data),
+        }
+        
+        let ok = self.is_stock_valid() && self.total_items >= self.wave_size_lb && self.total_items <= self.wave_size_ub;
+        let mut score = None;
+        if ok { score = Some(self.current_objective()); }
+        self.rollback();
+        score
+    }
+    
+    fn test_and_apply_move(&mut self, mv: &Move, data: &ProblemData, min_obj: f64) -> bool {
+        match *mv {
+            Move::OrderInsertion(i) => if self.total_items + data.order_total_items[i] > self.wave_size_ub { return false; },
+            Move::OrderSwap(o, i) => if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub { return false; },
+            Move::OrderRemoval(o) => if self.total_items < data.order_total_items[o] + self.wave_size_lb { return false; },
+            _ => {}
+        }
+        match *mv {
+            Move::OrderSwap(o, i) => { if self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return false; } },
+            _ => {}
+        }
+
+        match *mv {
+            Move::OrderSwap(o, i) => self.try_apply_order_swap(o, i, data),
+            Move::OrderInsertion(i) => self.try_apply_order_add(i, data),
+            Move::OrderRemoval(o) => self.try_apply_order_remove(o, data),
+            Move::AisleSwap(o, i) => self.try_apply_aisle_swap(o, i, data),
+            Move::AisleInsertion(i) => self.try_apply_aisle_add(i, data),
+            Move::AisleRemoval(o) => self.try_apply_aisle_remove(o, data),
+        }
+        
+        let ok = self.is_stock_valid() && self.total_items >= self.wave_size_lb && self.total_items <= self.wave_size_ub;
+        if ok {
+            let score = self.current_objective();
+            if score > min_obj + 1e-6 {
+                self.prune_active = true;
+                self.sync_aisles_from_orders(data); 
+                self.prune_active = false;
+                
+                let final_score = self.current_objective();
+                if final_score > min_obj + 1e-6 {
+                    self.commit();
+                    return true;
+                }
+            }
+        }
+        self.rollback();
+        false
+    }
+    
+    fn set_pruning(&mut self, prune: bool) {
+        self.prune_active = prune;
+    }
+
     fn clone_box(&self) -> Box<dyn Evaluator> { Box::new(self.clone()) }
 }

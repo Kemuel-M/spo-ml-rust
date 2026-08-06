@@ -13,7 +13,7 @@ impl SolverStrategy for SimpleSolver {
     }
 
     fn solve(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
-        let mut solution = self.constructive.construct(data, seed);
+        let mut solution = self.constructive.construct(data, seed, None);
         
         // Use o Evaluator para o score inicial, pois ele faz sincronizações automáticas
         let evaluator = crate::evaluator::StockBalanceEvaluator::new(&solution, data);

@@ -17,7 +17,7 @@ use crate::solution::{ProblemData, ChallengeSolution};
 /// Interface para Algoritmos Construtivos (Etapa 1).
 /// Objetivo: Criar uma solução válida do zero.
 pub trait ConstructiveAlgorithm: Send + Sync {
-    fn construct(&self, data: &ProblemData, seed: u64) -> ChallengeSolution;
+    fn construct(&self, data: &ProblemData, seed: u64, weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution;
     fn name(&self) -> String;
     fn with_alpha(&self, _alpha: f64) -> Option<Box<dyn ConstructiveAlgorithm>> {
         None
@@ -45,7 +45,7 @@ pub trait SolverStrategy: Send + Sync {
 // (Isso mantém a compatibilidade com a Etapa 1)
 impl<T: ConstructiveAlgorithm> SolverStrategy for T {
     fn solve(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
-        self.construct(data, seed)
+        self.construct(data, seed, None)
     }
 
     fn name(&self) -> String {

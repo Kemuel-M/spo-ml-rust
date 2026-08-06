@@ -21,7 +21,7 @@ impl SolverStrategy for SimulatedAnnealing {
 
     fn solve(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let mut curr_sol = self.constructive.construct(data, seed);
+        let mut curr_sol = self.constructive.construct(data, seed, None);
         
         let mut best_sol = curr_sol.clone();
         let mut eval = StockBalanceEvaluator::new(&curr_sol, data);

@@ -1,6 +1,6 @@
 use crate::solution::{ChallengeSolution, ProblemData};
 use crate::heuristics::LocalSearchAlgorithm;
-use crate::evaluator::{Evaluator, StockBalanceEvaluator, Move};
+use crate::evaluator::{Evaluator, StockBalanceEvaluator};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use super::{SearchStrategy, LocalSearchConfig};
@@ -23,6 +23,8 @@ impl LocalSearchAlgorithm for ConfigurableLocalSearch {
         solution.orders = evaluator.get_active_orders();
         solution.aisles = evaluator.get_active_aisles();
         solution.score = evaluator.current_objective();
+        
+        evaluator.set_pruning(false);
 
         let initial_obj = evaluator.current_objective();
         let backup_solution = solution.clone();
@@ -82,11 +84,12 @@ impl ConfigurableLocalSearch {
         moves.shuffle(&mut rng);
 
         for mv in moves {
-            if evaluator.validate_move(&mv, data) {
-                if self.apply_move(evaluator, solution, data, mv, current_obj) {
-                    trace!("    Melhoria encontrada: {:.4} via {:?}", evaluator.current_objective(), mv);
-                    return true;
-                }
+            if evaluator.test_and_apply_move(&mv, data, current_obj) {
+                trace!("    Melhoria encontrada: {:.4} via {:?}", evaluator.current_objective(), mv);
+                solution.orders = evaluator.get_active_orders();
+                solution.aisles = evaluator.get_active_aisles();
+                solution.score = evaluator.current_objective();
+                return true;
             }
         }
         false
@@ -107,19 +110,9 @@ impl ConfigurableLocalSearch {
             .map_init(
                 || evaluator.clone_box(), 
                 |local_eval, mv| {
-                        if local_eval.validate_move(&mv, data) {
-                            match mv {
-                                Move::OrderSwap(o, i) => local_eval.try_apply_order_swap(o, i, data),
-                                Move::OrderInsertion(i) => local_eval.try_apply_order_add(i, data),
-                                Move::OrderRemoval(o) => local_eval.try_apply_order_remove(o, data),
-                                Move::AisleSwap(o, i) => local_eval.try_apply_aisle_swap(o, i, data),
-                                Move::AisleInsertion(i) => local_eval.try_apply_aisle_add(i, data),
-                                Move::AisleRemoval(o) => local_eval.try_apply_aisle_remove(o, data),
-                            };
-                            let new_obj = local_eval.current_objective();
-                            local_eval.rollback();
-                            return Some((mv, new_obj));
-                        }
+                    if let Some(new_obj) = local_eval.test_move(&mv, data) {
+                        return Some((mv, new_obj));
+                    }
                     None
                 }
             )
@@ -128,38 +121,14 @@ impl ConfigurableLocalSearch {
 
         if let Some((mv, best_obj)) = best_move_found {
             if best_obj > current_obj + 1e-6 {
-                return self.apply_move(evaluator, solution, data, mv, current_obj);
+                if evaluator.test_and_apply_move(&mv, data, current_obj) {
+                    solution.orders = evaluator.get_active_orders();
+                    solution.aisles = evaluator.get_active_aisles();
+                    solution.score = evaluator.current_objective();
+                    return true;
+                }
             }
         }
-        false
-    }
-
-    fn apply_move(
-        &self, 
-        evaluator: &mut dyn Evaluator, 
-        solution: &mut ChallengeSolution, 
-        data: &ProblemData, 
-        mv: Move, 
-        current_obj: f64
-    ) -> bool {
-        match mv {
-            Move::OrderSwap(o, i) => evaluator.try_apply_order_swap(o, i, data),
-            Move::OrderInsertion(i) => evaluator.try_apply_order_add(i, data),
-            Move::OrderRemoval(o) => evaluator.try_apply_order_remove(o, data),
-            Move::AisleSwap(o, i) => evaluator.try_apply_aisle_swap(o, i, data),
-            Move::AisleInsertion(i) => evaluator.try_apply_aisle_add(i, data),
-            Move::AisleRemoval(o) => evaluator.try_apply_aisle_remove(o, data),
-        };
-
-        let new_obj = evaluator.current_objective();
-        if new_obj > current_obj + 1e-6 {
-            evaluator.commit();
-            solution.orders = evaluator.get_active_orders();
-            solution.aisles = evaluator.get_active_aisles();
-            solution.score = new_obj;
-            return true;
-        }
-        evaluator.rollback();
         false
     }
 }

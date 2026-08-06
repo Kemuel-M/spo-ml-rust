@@ -25,7 +25,7 @@ impl ConstructiveAlgorithm for SuperHybrid {
         format!("SuperHybrid (P_zero={:.2}, P_ord={:.2})", self.p_zero_alpha, self.p_orders)
     }
 
-    fn construct(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
+    fn construct(&self, data: &ProblemData, seed: u64, weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         
         // 1. Decide o Alpha
@@ -36,17 +36,21 @@ impl ConstructiveAlgorithm for SuperHybrid {
         };
         
         // 2. Decide a Família (Order ou Aisle)
-        let is_order = rng.random_bool(self.p_orders);
+        let is_order = if let Some((_, dim)) = weights {
+            dim == crate::local_searchs::SearchDimension::Orders
+        } else {
+            rng.random_bool(self.p_orders)
+        };
         
         let sol = if is_order {
             let strat = RandomGreedy { alpha };
-            let mut s = strat.construct(data, seed);
+            let mut s = strat.construct(data, seed, weights);
             s.metadata.insert("strategy".to_string(), "orders".to_string());
             s.metadata.insert("alpha".to_string(), alpha.to_string());
             s
         } else {
             let strat = AisleCentricRandom { alpha };
-            let mut s = strat.construct(data, seed);
+            let mut s = strat.construct(data, seed, weights);
             s.metadata.insert("strategy".to_string(), "aisles".to_string());
             s.metadata.insert("alpha".to_string(), alpha.to_string());
             s

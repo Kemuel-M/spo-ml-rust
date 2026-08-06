@@ -42,90 +42,7 @@ impl BPSO {
         for idx in bits.ones() { if idx < n { v[idx] = true; } } v
     }
 
-    fn guided_construct(&self, data: &ProblemData, scores: &[f64], dim: SearchDimension, _seed: u64, indices: &mut Vec<usize>) -> ChallengeSolution {
-        let n_orders = data.orders.len();
-        if dim == SearchDimension::Orders {
-            let mut sol = ChallengeSolution::new(n_orders, data.aisles.len());
-            use crate::evaluator::core_stock::GlobalStock;
-            let mut stock = GlobalStock::new(data.n_items);
-            
-            let mut curr_items = 0;
-            let mut current_obj = 0.0;
 
-            indices.clear();
-            indices.extend_from_slice(&data.all_order_indices);
-            indices.sort_unstable_by(|&a, &b| {
-                scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            let mut unopened_req = Vec::with_capacity(32);
-            for &idx in indices.iter() {
-                if curr_items >= data.wave_size_ub { break; }
-                let total = data.order_total_items[idx];
-                if curr_items + total > data.wave_size_ub { continue; }
-
-                unopened_req.clear();
-                for &a in &data.order_required_aisles[idx] {
-                    if !sol.aisles.contains(a) { unopened_req.push(a); }
-                }
-                
-                if !stock.can_fulfill_order_with_aisles(idx, &unopened_req, data) { continue; }
-
-                if curr_items >= data.wave_size_lb {
-                    let total_ac = sol.aisles.count_ones(..) + unopened_req.len();
-                    let new_obj = (curr_items + total) as f64 / total_ac as f64;
-                    if new_obj <= current_obj && scores[idx] < self.config.score_threshold_orders { continue; }
-                }
-
-                curr_items += total;
-                sol.orders.insert(idx);
-                for &a in &unopened_req {
-                    sol.aisles.insert(a);
-                    stock.add_aisle_sparse(a, data);
-                }
-                stock.remove_order_sparse(idx, data);
-                current_obj = curr_items as f64 / sol.aisles.count_ones(..) as f64;
-            }
-            sol.score = current_obj;
-            sol.feasible = curr_items >= data.wave_size_lb;
-            sol
-        } else {
-            // Aisle-Centric Guided Construct
-            let mut sol = ChallengeSolution::new(n_orders, data.aisles.len());
-            use crate::evaluator::core_stock::GlobalStock;
-            let mut stock = GlobalStock::new(data.n_items);
-            let mut total_items = 0;
-            
-            indices.clear();
-            indices.extend(0..data.aisles.len());
-            indices.sort_unstable_by(|&a, &b| {
-                scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            for &aid in indices.iter() {
-                if total_items >= data.wave_size_ub { break; }
-                if scores[aid] < self.config.score_threshold_aisles { continue; }
-
-                sol.aisles.insert(aid);
-                stock.add_aisle_sparse(aid, data);
-
-                for &oid in &data.orders_sorted_by_size {
-                    if sol.orders.contains(oid) { continue; }
-                    let oqty = data.order_total_items[oid];
-                    if total_items + oqty > data.wave_size_ub { continue; }
-
-                    if stock.can_add_order_safely(oid, data) {
-                        stock.remove_order_sparse(oid, data);
-                        sol.orders.insert(oid);
-                        total_items += oqty;
-                    }
-                }
-            }
-            sol.score = total_items as f64 / sol.aisles.count_ones(..).max(1) as f64;
-            sol.feasible = total_items >= data.wave_size_lb && total_items <= data.wave_size_ub;
-            sol
-        }
-    }
 }
 
 impl SolverStrategy for BPSO {
@@ -143,7 +60,7 @@ impl SolverStrategy for BPSO {
                 BpsoDimension::Hybrid => if rng.random::<f64>() < self.config.p_orders { SearchDimension::Orders } else { SearchDimension::Aisles }
             };
             
-            let s = self.constructive.construct(data, seed + i as u64); 
+            let s = self.constructive.construct(data, seed + i as u64, None); 
             let f = utils::compute_objective(&s, data);
             let n = if dim == SearchDimension::Orders { n_orders } else { n_aisles };
             let p = Self::solution_to_vec(&s, dim, n); 
@@ -239,7 +156,7 @@ impl SolverStrategy for BPSO {
                 
                 let seed_construct = p.rng.next_u64();
                 let t_start_const = Instant::now();
-                let mut sol = self.guided_construct(data, &p.scores_buffer, p.dimension, seed_construct, &mut p.indices_buffer);
+                let mut sol = self.constructive.construct(data, seed_construct, Some((&p.scores_buffer, p.dimension)));
                 let time_const = t_start_const.elapsed().as_secs_f64();
                 
                 sol.score = utils::compute_objective(&sol, data);

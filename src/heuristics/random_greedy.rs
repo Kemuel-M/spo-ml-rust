@@ -39,7 +39,7 @@ impl ConstructiveAlgorithm for RandomGreedy {
         Some(Box::new(RandomGreedy { alpha }))
     }
 
-    fn construct(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
+    fn construct(&self, data: &ProblemData, seed: u64, weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let n_orders = data.orders.len();
         let mut solution = ChallengeSolution::new(n_orders, data.aisles.len());
@@ -54,10 +54,15 @@ impl ConstructiveAlgorithm for RandomGreedy {
         let mut is_selected = vec![false; n_orders];
 
         let mut heap = BinaryHeap::with_capacity(n_orders);
+        let order_weights = if let Some((w, dim)) = weights {
+            if dim == crate::local_searchs::SearchDimension::Orders { Some(w) } else { None }
+        } else { None };
+
         for i in 0..n_orders {
             let total = data.order_total_items[i];
             let new_ac = current_new_ac[i];
-            let score = if new_ac == 0 { f64::MAX / 2.0 + total as f64 } else { total as f64 / (new_ac as f64).powi(2) };
+            let base_score = if new_ac == 0 { f64::MAX / 2.0 + total as f64 } else { total as f64 / (new_ac as f64).powi(2) };
+            let score = if let Some(w) = order_weights { base_score * w[i] } else { base_score };
             heap.push(Candidate { id: i, score });
         }
 
@@ -129,7 +134,8 @@ impl ConstructiveAlgorithm for RandomGreedy {
                         current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1);
                         let o_total = data.order_total_items[o_idx];
                         let new_ac = current_new_ac[o_idx];
-                        let o_score = if new_ac == 0 { f64::MAX / 2.0 + o_total as f64 } else { o_total as f64 / (new_ac as f64).powi(2) };
+                        let base_o_score = if new_ac == 0 { f64::MAX / 2.0 + o_total as f64 } else { o_total as f64 / (new_ac as f64).powi(2) };
+                        let o_score = if let Some(w) = order_weights { base_o_score * w[o_idx] } else { base_o_score };
                         heap.push(Candidate { id: o_idx, score: o_score });
                     }
                 }
@@ -230,7 +236,7 @@ mod tests {
     fn test_random_greedy_construct() {
         let data = build_mock_problem_data();
         let algo = RandomGreedy { alpha: 0.0 }; // alpha 0 = fully greedy
-        let solution = algo.construct(&data, 42);
+        let solution = algo.construct(&data, 42, None);
         
         assert!(solution.feasible, "Solution should be feasible");
         assert!(solution.orders.count_ones(..) > 0, "Should have selected at least one order");

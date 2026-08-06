@@ -19,7 +19,7 @@ impl SolverStrategy for Ils {
     fn solve(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
         let start_time = Instant::now();
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let mut curr = self.constructive.construct(data, seed);
+        let mut curr = self.constructive.construct(data, seed, None);
         self.local_search.refine(&mut curr, data, seed + 1);
         let mut best = curr.clone();
         let mut best_obj = utils::compute_objective(&best, data);
@@ -62,7 +62,7 @@ impl Ils {
         sol.orders = eval.get_active_orders();
         sol.aisles = eval.get_active_aisles();
         if sol.orders.count_ones(..) < (data.wave_size_lb as usize / 2) {
-             *sol = self.constructive.construct(data, rng.next_u64());
+             *sol = self.constructive.construct(data, rng.next_u64(), None);
         }
     }
 }

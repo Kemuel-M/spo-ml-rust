@@ -37,7 +37,7 @@ impl SolverStrategy for GeneticAlgorithm {
         // 1. Inicialização Paralela (Prioridade 4)
         let mut pop: Vec<ChallengeSolution> = (0..self.config.population_size)
             .into_par_iter()
-            .map(|i| self.constructive.construct(data, seed + i as u64))
+            .map(|i| self.constructive.construct(data, seed + i as u64, None))
             .collect();
 
         // Aplicar LS inicial em paralelo
@@ -154,6 +154,6 @@ impl GeneticAlgorithm {
         eval.commit();
         sol.orders = eval.get_active_orders();
         sol.aisles = eval.get_active_aisles();
-        if !utils::is_feasible(sol, data) { *sol = self.constructive.construct(data, seed); }
+        if !utils::is_feasible(sol, data) { *sol = self.constructive.construct(data, seed, None); }
     }
 }

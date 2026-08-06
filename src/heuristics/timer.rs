@@ -22,9 +22,9 @@ impl ConstructiveAlgorithm for TimedConstructive {
         self.inner.with_alpha(alpha).map(|c| Box::new(TimedConstructive::new(c)) as Box<dyn ConstructiveAlgorithm>)
     }
 
-    fn construct(&self, data: &ProblemData, seed: u64) -> ChallengeSolution {
+    fn construct(&self, data: &ProblemData, seed: u64, _weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let start = Instant::now();
-        let solution = self.inner.construct(data, seed);
+        let solution = self.inner.construct(data, seed, None);
         let duration = start.elapsed();
         
         println!("  [Timer] Construction ({}) took {:.4}s", self.inner.name(), duration.as_secs_f64());

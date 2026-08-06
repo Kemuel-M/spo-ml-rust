@@ -38,5 +38,13 @@ pub trait Evaluator: Send + Sync {
     }
 
     fn clone_box(&self) -> Box<dyn Evaluator>;
+    
+    fn set_pruning(&mut self, _prune: bool) {} // Default trait impl
+    
+    // Antigo
     fn validate_move(&mut self, mv: &Move, data: &ProblemData) -> bool;
+    
+    // Novos otimizados
+    fn test_move(&mut self, mv: &Move, data: &ProblemData) -> Option<f64>;
+    fn test_and_apply_move(&mut self, mv: &Move, data: &ProblemData, min_obj: f64) -> bool;
 }

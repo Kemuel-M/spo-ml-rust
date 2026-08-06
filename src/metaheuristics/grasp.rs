@@ -26,12 +26,12 @@ impl Grasp {
                     aisle_strategy: crate::heuristics::aisle_centric_random::AisleCentricRandom { alpha },
                     p_orders,
                 };
-                hybrid.construct(data, iter_seed)
+                hybrid.construct(data, iter_seed, None)
             } else {
-                constr.construct(data, iter_seed)
+                constr.construct(data, iter_seed, None)
             }
         } else {
-            self.constructive.construct(data, iter_seed)
+            self.constructive.construct(data, iter_seed, None)
         };
 
         // Usa um offset para a semente da busca local para não repetir a mesma sequência da construção
