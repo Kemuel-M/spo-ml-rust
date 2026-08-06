@@ -88,6 +88,8 @@ impl LocalSearchAlgorithm for HybridVND {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::evaluator::StockBalanceEvaluator;
+    use crate::evaluator::types::Evaluator;
     use crate::io::read_input;
     use std::time::Instant;
 
