@@ -108,3 +108,58 @@ impl GlobalStock {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::io::read_input;
+
+    fn get_test_data() -> ProblemData {
+        read_input("datasets/x/instance_0010.txt", false).expect("Failed to load test instance")
+    }
+
+    #[test]
+    fn test_global_stock_add_remove_aisle() {
+        let data = get_test_data();
+        let mut stock = GlobalStock::new(data.n_items);
+
+        // All balances should be 0 initially
+        assert!(stock.balance.iter().all(|&b| b == 0));
+
+        // Add aisle 0
+        stock.add_aisle_sparse(0, &data);
+        
+        // Check if some balance increased
+        assert!(stock.balance.iter().any(|&b| b > 0));
+
+        // Remove aisle 0
+        stock.remove_aisle_dense(0, &data);
+        
+        // All balances should be 0 again
+        assert!(stock.balance.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_global_stock_add_remove_order() {
+        let data = get_test_data();
+        let mut stock = GlobalStock::new(data.n_items);
+
+        // Add aisle 0 to have some stock
+        stock.add_aisle_dense(0, &data);
+        let pre_order_balance = stock.balance.clone();
+
+        // Add order 0 (simulating fulfillment, stock balance increases mathematically, but usually orders REMOVE stock in our logic)
+        // Wait, remove_order_sparse reduces balance. add_order_sparse increases balance.
+        stock.remove_order_sparse(0, &data);
+
+        // Some stock should be reduced
+        let has_difference = pre_order_balance.iter().zip(&stock.balance).any(|(pre, post)| post < pre);
+        assert!(has_difference, "Order removal should decrease stock balance");
+
+        // Add order 0 back
+        stock.add_order_sparse(0, &data);
+
+        // Should be equal to pre_order_balance
+        assert_eq!(pre_order_balance, stock.balance);
+    }
+}

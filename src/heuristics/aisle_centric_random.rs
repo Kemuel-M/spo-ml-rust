@@ -64,44 +64,40 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
             
             // Em vez de percorrer uma lista estática, preenchemos a onda iterativamente 
             // usando uma abordagem GRASP para os pedidos também.
-            loop {
-                let mut candidates_orders = Vec::new();
-
-                for &oid in &unselected {
-                    let oqty = data.order_total_items[oid];
-                    if total_items + oqty > data.wave_size_ub { continue; }
-
-                    let mut can_fulfill = true;
-                    for item in &data.dense_orders[oid] {
-                        if total_curr_stock[item.id] < item.qty {
-                            can_fulfill = false;
-                            break;
-                        }
-                    }
-
-                    if can_fulfill {
-                        // A métrica gulosa para o pedido: Tamanho do pedido (favorecemos pedidos maiores para encher a onda)
-                        candidates_orders.push((oid, oqty as f64));
-                    }
+            let mut candidates_orders = Vec::new();
+            for &oid in &unselected {
+                let mut can_fulfill = true;
+                for item in &data.dense_orders[oid] {
+                    if total_curr_stock[item.id] < item.qty { can_fulfill = false; break; }
                 }
+                if can_fulfill { candidates_orders.push(oid); }
+            }
+            
+            loop {
+                candidates_orders.retain(|&oid| {
+                    if total_items + data.order_total_items[oid] > data.wave_size_ub { return false; }
+                    for item in &data.dense_orders[oid] {
+                        if total_curr_stock[item.id] < item.qty { return false; }
+                    }
+                    true
+                });
 
                 if candidates_orders.is_empty() {
-                    break; // Nenhum pedido restante consegue ser montado com o estoque atual dos corredores abertos
+                    break;
                 }
 
-                // Aplica a RCL (Restricted Candidate List) nos pedidos
                 let (min_s, max_s) = candidates_orders.iter()
-                    .fold((f64::MAX, f64::MIN), |(min, max), c| (min.min(c.1), max.max(c.1)));
+                    .map(|&oid| data.order_total_items[oid] as f64)
+                    .fold((f64::MAX, f64::MIN), |(min, max), s| (min.min(s), max.max(s)));
                 
                 let threshold = max_s - self.alpha * (max_s - min_s);
-                let rcl: Vec<usize> = candidates_orders.into_iter()
-                    .filter(|c| c.1 >= threshold)
-                    .map(|c| c.0)
+                let rcl: Vec<usize> = candidates_orders.iter()
+                    .filter(|&&oid| data.order_total_items[oid] as f64 >= threshold)
+                    .copied()
                     .collect();
 
                 let chosen_oid = *rcl.choose(&mut rng).unwrap();
 
-                // Deduz o estoque do pedido escolhido
                 for item in &data.dense_orders[chosen_oid] {
                     total_curr_stock[item.id] -= item.qty;
                     pending_demand[item.id] = pending_demand[item.id].saturating_sub(item.qty);
@@ -110,6 +106,7 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
                 to_add.push(chosen_oid);
                 total_items += data.order_total_items[chosen_oid];
                 unselected.remove(&chosen_oid);
+                candidates_orders.retain(|&oid| oid != chosen_oid);
             }
             
             for oid in to_add {

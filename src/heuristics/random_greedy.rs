@@ -1,12 +1,35 @@
 use crate::solution::{ChallengeSolution, ProblemData};
 use super::ConstructiveAlgorithm;
-use std::cmp::Ordering;
 use rand::prelude::*;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
 pub struct RandomGreedy {
     pub alpha: f64,
+}
+
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+
+#[derive(Clone, Copy)]
+struct Candidate {
+    id: usize,
+    score: f64,
+}
+
+impl PartialEq for Candidate {
+    fn eq(&self, other: &Self) -> bool { self.id == other.id }
+}
+impl Eq for Candidate {}
+impl PartialOrd for Candidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.score.partial_cmp(&other.score)
+    }
+}
+impl Ord for Candidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
 }
 
 impl ConstructiveAlgorithm for RandomGreedy {
@@ -27,60 +50,74 @@ impl ConstructiveAlgorithm for RandomGreedy {
         let mut curr_items = 0;
         let mut current_obj = 0.0;
 
-        let mut current_new_ac: Vec<usize> = data.order_required_aisles.iter().map(|req| req.len()).collect();
+        let mut current_new_ac: Vec<usize> = data.order_initial_aisles_count.clone();
 
-        let mut unselected: Vec<usize> = (0..n_orders).collect();
+        let mut heap = BinaryHeap::with_capacity(n_orders);
+        for i in 0..n_orders {
+            let total = data.order_total_items[i];
+            let new_ac = current_new_ac[i];
+            let score = if new_ac == 0 { f64::MAX / 2.0 + total as f64 } else { total as f64 / (new_ac as f64).powi(2) };
+            heap.push(Candidate { id: i, score });
+        }
+
         let mut unopened_req = Vec::with_capacity(32);
-        let mut candidates = Vec::with_capacity(n_orders);
-
-        while curr_items < data.wave_size_ub {
-            candidates.clear();
-            let best_obj = current_obj;
-
-            for &idx in &unselected {
-                let total = data.order_total_items[idx];
+        
+        while curr_items < data.wave_size_ub && !heap.is_empty() {
+            let mut rcl = Vec::with_capacity(32);
+            
+            while rcl.len() < 20 && !heap.is_empty() {
+                let cand = heap.pop().unwrap();
+                let total = data.order_total_items[cand.id];
+                
                 if curr_items + total > data.wave_size_ub { continue; }
                 
-                let req = &data.order_required_aisles[idx];
+                let actual_new_ac = current_new_ac[cand.id];
+                let actual_score = if actual_new_ac == 0 { f64::MAX / 2.0 + total as f64 } else { total as f64 / (actual_new_ac as f64).powi(2) };
                 
+                if (cand.score - actual_score).abs() > 1e-6 {
+                    heap.push(Candidate { id: cand.id, score: actual_score });
+                    continue;
+                }
+
                 unopened_req.clear();
-                for &a in req {
+                for &a in &data.order_required_aisles[cand.id] {
                     if !solution.aisles.contains(a) { unopened_req.push(a); }
                 }
                 
-                if stock.can_fulfill_order_with_aisles(idx, &unopened_req, data) {
-                    let new_ac = current_new_ac[idx];
-                    let score = if new_ac == 0 { f64::MAX / 2.0 + total as f64 } else { total as f64 / (new_ac as f64).powi(2) };
-                    if curr_items >= data.wave_size_lb {
-                        let total_ac = solution.aisles.count_ones(..) + new_ac;
-                        let new_obj = (curr_items + total) as f64 / total_ac as f64;
-                        if new_obj <= best_obj { continue; }
-                    }
-                    candidates.push((idx, score));
+                if stock.can_fulfill_order_with_aisles(cand.id, &unopened_req, data) {
+                    rcl.push(cand);
                 }
             }
 
-            if candidates.is_empty() { break; }
-            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+            if rcl.is_empty() { break; }
 
-            let limit = (candidates.len() as f64 * self.alpha).max(1.0) as usize;
-            let chosen_idx_in_candidates = if self.alpha == 0.0 { 0 } else { rng.random_range(0..limit.min(candidates.len())) };
-            let (chosen_id, _) = candidates.remove(chosen_idx_in_candidates);
+            let limit = (rcl.len() as f64 * self.alpha).max(1.0) as usize;
+            let chosen_idx = if self.alpha == 0.0 { 0 } else { rng.random_range(0..limit.min(rcl.len())) };
+            let chosen = rcl.remove(chosen_idx);
             
-            let pos = unselected.iter().position(|&x| x == chosen_id).unwrap();
-            unselected.swap_remove(pos);
+            for remaining in rcl { heap.push(remaining); }
 
-            let total = data.order_total_items[chosen_id];
-            let req = &data.order_required_aisles[chosen_id];
+            let idx = chosen.id;
+            let total = data.order_total_items[idx];
+            let req = &data.order_required_aisles[idx];
 
+            if curr_items >= data.wave_size_lb {
+                let new_ac_count = current_new_ac[idx];
+                let total_ac = solution.aisles.count_ones(..) + new_ac_count;
+                let new_obj = (curr_items + total) as f64 / total_ac as f64;
+                if new_obj <= current_obj {
+                    continue; 
+                }
+            }
+
+            solution.orders.insert(idx);
+            curr_items += total;
+            
             unopened_req.clear();
             for &a in req {
                 if !solution.aisles.contains(a) { unopened_req.push(a); }
             }
 
-            solution.orders.insert(chosen_id);
-            curr_items += total;
-            
             for &a in &unopened_req {
                 solution.aisles.insert(a);
                 stock.add_aisle_sparse(a, data);
@@ -89,7 +126,7 @@ impl ConstructiveAlgorithm for RandomGreedy {
                 }
             }
             
-            stock.remove_order_sparse(chosen_id, data);
+            stock.remove_order_sparse(idx, data);
             
             current_obj = curr_items as f64 / solution.aisles.count_ones(..) as f64;
         }

@@ -4,7 +4,7 @@ use crate::evaluator::{Evaluator, StockBalanceEvaluator, Move};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use super::{SearchStrategy, LocalSearchConfig};
-use log::{trace, debug};
+use log::trace;
 
 pub struct ConfigurableLocalSearch {
     pub config: LocalSearchConfig,
@@ -161,5 +161,68 @@ impl ConfigurableLocalSearch {
         }
         evaluator.rollback();
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::io::read_input;
+    use crate::local_searchs::{NeighborhoodType, SearchDimension};
+    use std::time::Instant;
+
+    fn get_test_data() -> ProblemData {
+        read_input("datasets/x/instance_0010.txt", false).expect("Failed to load test instance")
+    }
+
+    fn create_initial_solution(data: &ProblemData) -> ChallengeSolution {
+        let mut sol = ChallengeSolution::new(data.orders.len(), data.aisles.len());
+        // Preenche de forma viavel (primeiros 5 pedidos)
+        for i in 0..5 {
+            sol.orders.insert(i);
+            for &a in data.order_required_aisles[i].iter() {
+                sol.aisles.insert(a);
+            }
+        }
+        let eval = StockBalanceEvaluator::new(&sol, data);
+        sol.score = eval.current_objective();
+        sol
+    }
+
+    #[test]
+    fn test_configurable_first_improvement_orders_insertion() {
+        let data = get_test_data();
+        let mut sol = create_initial_solution(&data);
+        let initial_score = sol.score;
+
+        let config = LocalSearchConfig {
+            dimension: SearchDimension::Orders,
+            strategy: SearchStrategy::FirstImprovement,
+            neighborhood: NeighborhoodType::Insertion,
+            sampling_size: 100,
+            max_iterations: 1,
+            max_time_secs: 2,
+        };
+
+        let engine = crate::local_searchs::neighborhood::build_neighborhood(
+            SearchDimension::Orders, 
+            NeighborhoodType::Insertion
+        );
+
+        let cls = ConfigurableLocalSearch {
+            config,
+            neighborhood_engine: engine,
+        };
+
+        let start = Instant::now();
+        let improved = cls.refine(&mut sol, &data, 123);
+        let duration = start.elapsed();
+
+        println!("Time taken for Order Insertion FI: {:?}", duration);
+        assert!(duration.as_secs() <= 2, "Order insertion was too slow");
+
+        if improved {
+            assert!(sol.score > initial_score, "Score should increase on improvement");
+        }
     }
 }

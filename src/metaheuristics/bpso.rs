@@ -1,5 +1,5 @@
 use crate::solution::{ChallengeSolution, ProblemData};
-use log::{info, debug, trace};
+use log::info;
 use crate::heuristics::{SolverStrategy, ConstructiveAlgorithm, LocalSearchAlgorithm, utils};
 use crate::local_searchs::SearchDimension;
 use rand::prelude::*;
@@ -52,11 +52,9 @@ impl BPSO {
             let mut curr_items = 0;
             let mut current_obj = 0.0;
 
-            let mut current_new_ac = data.order_initial_aisles_count.clone();
-
             indices.clear();
             indices.extend_from_slice(&data.all_order_indices);
-            indices.sort_by(|&a, &b| {
+            indices.sort_unstable_by(|&a, &b| {
                 scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
             });
 
@@ -86,9 +84,6 @@ impl BPSO {
                     stock.add_aisle_sparse(a, data);
                 }
                 stock.remove_order_sparse(idx, data);
-                for &a in &unopened_req {
-                    for &o_idx in &data.aisle_to_orders_req[a] { current_new_ac[o_idx] = current_new_ac[o_idx].saturating_sub(1); }
-                }
                 current_obj = curr_items as f64 / sol.aisles.count_ones(..) as f64;
             }
             sol.score = current_obj;
@@ -103,7 +98,7 @@ impl BPSO {
             
             indices.clear();
             indices.extend(0..data.aisles.len());
-            indices.sort_by(|&a, &b| {
+            indices.sort_unstable_by(|&a, &b| {
                 scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal)
             });
 
@@ -215,7 +210,7 @@ impl SolverStrategy for BPSO {
             // gbest_v_orders and gbest_v_aisles are updated at the end of the loop if improved
 
             // Parallel computation of movement and stats
-            let stats: (usize, f64, usize, usize, usize, usize, usize) = particles.par_iter_mut().map(|p| {
+            let stats: (usize, f64, usize, usize, usize, usize, usize, f64, f64) = particles.par_iter_mut().map(|p| {
                 let n = p.velocity.len();
                 let gbest_v = if p.dimension == SearchDimension::Orders { &gbest_v_orders } else { &gbest_v_aisles };
                 let scores = &mut p.scores_buffer;
@@ -243,19 +238,26 @@ impl SolverStrategy for BPSO {
                 }
                 
                 let seed_construct = p.rng.next_u64();
+                let t_start_const = Instant::now();
                 let mut sol = self.guided_construct(data, &p.scores_buffer, p.dimension, seed_construct, &mut p.indices_buffer);
+                let time_const = t_start_const.elapsed().as_secs_f64();
+                
+                sol.score = utils::compute_objective(&sol, data);
                 
                 let mut ls_hit = 0;
                 let mut ls_attempt = 0;
+                let mut time_ls = 0.0;
                 if p.rng.random::<f64>() < current_ls_prob { 
                     ls_attempt = 1;
-                    let before_f = utils::compute_objective(&sol, data);
                     let seed_ls = p.rng.next_u64();
-                    self.local_search.refine(&mut sol, data, seed_ls); 
-                    if utils::compute_objective(&sol, data) > before_f { ls_hit = 1; }
+                    let t_start_ls = Instant::now();
+                    if self.local_search.refine(&mut sol, data, seed_ls) {
+                        ls_hit = 1;
+                    }
+                    time_ls = t_start_ls.elapsed().as_secs_f64(); 
                 }
                 
-                let f = utils::compute_objective(&sol, data);
+                let f = sol.score;
                 p.current_solution = sol;
                 p.position = Self::solution_to_vec(&p.current_solution, p.dimension, n);
                 
@@ -264,16 +266,17 @@ impl SolverStrategy for BPSO {
                     p.best_fitness = f; p.best_position = p.position.clone(); p.best_solution = p.current_solution.clone();
                     improved = 1;
                 }
-                (improved, v_sum / n as f64, ls_attempt, ls_hit, v_sat_count, h_dist_count, n)
-            }).reduce(|| (0, 0.0, 0, 0, 0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3, a.4 + b.4, a.5 + b.5, a.6 + b.6));
+                (improved, v_sum / n as f64, ls_attempt, ls_hit, v_sat_count, h_dist_count, n, time_const, time_ls)
+            }).reduce(|| (0, 0.0, 0, 0, 0, 0, 0, 0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3, a.4 + b.4, a.5 + b.5, a.6 + b.6, a.7 + b.7, a.8 + b.8));
 
             let improvements = stats.0;
-            let avg_v = stats.1 / particles.len() as f64;
             let ls_attempts = stats.2;
             let ls_hits = stats.3;
             let total_sat = stats.4;
             let total_h_dist = stats.5;
             let total_bits = stats.6;
+            let total_time_const = stats.7;
+            let total_time_ls = stats.8;
 
             let avg_sat_percent = if total_bits > 0 { (total_sat as f64 / total_bits as f64) * 100.0 } else { 0.0 };
             let avg_h_dist_percent = if total_bits > 0 { (total_h_dist as f64 / total_bits as f64) * 100.0 } else { 0.0 };
@@ -281,7 +284,6 @@ impl SolverStrategy for BPSO {
             final_v_sat = avg_sat_percent;
             final_h_dist = avg_h_dist_percent;
 
-            let avg_fitness: f64 = particles.iter().map(|p| p.best_fitness).sum::<f64>() / particles.len() as f64;
             let imp_percent = (improvements as f64 / particles.len() as f64) * 100.0;
             let ls_hit_rate = if ls_attempts > 0 { (ls_hits as f64 / ls_attempts as f64) * 100.0 } else { 0.0 };
 
@@ -299,8 +301,8 @@ impl SolverStrategy for BPSO {
                 stagnation_count = 0; 
             } else { stagnation_count += 1; }
             if iter % self.config.log_frequency == 0 || improved {
-                println!("  {:<6} | {:<10.4} | {:<8.4} | {:>4.1}% | {:<4} | {:<4.2} | {:<4.2} | {:<5.2} | {:>4.1}% | {:>4.1}% | {:>4.1}% | {:>3}s", 
-                         iter, gbest_f, avg_fitness, imp_percent, stagnation_count, w, turbulence_chance, avg_v, ls_hit_rate, avg_sat_percent, avg_h_dist_percent, start.elapsed().as_secs());
+                println!("Iter {:<3} | Best: {:.4} | Imp: {:>4.1}% | Stag: {} | LSHit: {:>4.1}% | T.Const: {:.1}s | T.LS: {:.1}s", 
+                         iter, gbest_f, imp_percent, stagnation_count, ls_hit_rate, total_time_const, total_time_ls);
             }
         }
         println!("  {}", "-".repeat(110));

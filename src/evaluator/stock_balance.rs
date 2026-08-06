@@ -200,8 +200,12 @@ impl Evaluator for StockBalanceEvaluator {
         // Lookahead para movimentos destrutivos que não dependem de reparo
         match *mv {
             Move::OrderInsertion(i) => {
-                // Se a inserção estourar o limite UB, aborta (inserir corredores não reduz a quantidade de itens da ordem)
                 if self.total_items + data.order_total_items[i] > self.wave_size_ub {
+                    return false;
+                }
+            },
+            Move::OrderSwap(o, i) => {
+                if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub {
                     return false;
                 }
             },

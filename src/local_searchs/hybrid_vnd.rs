@@ -1,9 +1,8 @@
 use crate::solution::{ChallengeSolution, ProblemData};
 use crate::heuristics::LocalSearchAlgorithm;
 use crate::local_searchs::{ConfigurableLocalSearch, SearchStrategy, NeighborhoodType, LocalSearchConfig, SearchDimension};
-use crate::evaluator::{StockBalanceEvaluator, Evaluator, Move};
 use std::time::Instant;
-use log::{debug, trace};
+use log::debug;
 
 pub struct HybridVND {
     pub neighborhoods: Vec<ConfigurableLocalSearch>,
@@ -60,8 +59,7 @@ impl LocalSearchAlgorithm for HybridVND {
 
     fn refine(&self, solution: &mut ChallengeSolution, data: &ProblemData, seed: u64) -> bool {
         let start_time = Instant::now();
-        let mut eval = StockBalanceEvaluator::new(solution, data);
-        debug!("HVND Iniciado: score base={:.4}", eval.current_objective());
+        debug!("HVND Iniciado: score base={:.4}", solution.score);
         
         let mut k = 0;
         let mut global_improvement = false;
@@ -76,7 +74,7 @@ impl LocalSearchAlgorithm for HybridVND {
 
             if improved {
                 global_improvement = true;
-                debug!("HVND: melhoria encontrada na vizinhança {}, novo score={:.4}", k, eval.current_objective());
+                debug!("HVND: melhoria encontrada na vizinhança {}, novo score={:.4}", k, solution.score);
                 k = 0; // Volta para o início se melhorou
             } else {
                 k += 1;
@@ -84,5 +82,76 @@ impl LocalSearchAlgorithm for HybridVND {
         }
 
         global_improvement
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::io::read_input;
+    use std::time::Instant;
+
+    fn get_test_data() -> ProblemData {
+        read_input("datasets/x/instance_0010.txt", false).expect("Failed to load test instance")
+    }
+
+    fn create_initial_solution(data: &ProblemData) -> ChallengeSolution {
+        let mut sol = ChallengeSolution::new(data.orders.len(), data.aisles.len());
+        // Cria uma solucao viavel basica (primeiros 5 pedidos)
+        for i in 0..5 {
+            sol.orders.insert(i);
+            for &a in data.order_required_aisles[i].iter() {
+                sol.aisles.insert(a);
+            }
+        }
+        
+        let eval = StockBalanceEvaluator::new(&sol, data);
+        sol.score = eval.current_objective();
+        sol
+    }
+
+    #[test]
+    fn test_hvnd_full_execution_and_timing() {
+        let data = get_test_data();
+        let mut sol = create_initial_solution(&data);
+        let initial_score = sol.score;
+
+        let mut hvnd = HybridVND::default();
+        hvnd.max_time_secs = 2; // Limite baixo para o teste nao demorar eternamente se houver infinitos updates
+        
+        let start = Instant::now();
+        let improved = hvnd.refine(&mut sol, &data, 42);
+        let duration = start.elapsed();
+
+        assert!(duration.as_secs() <= 3, "HVND demorou demais e furou o limite de tempo do teste");
+
+        if improved {
+            assert!(sol.score > initial_score, "Se a busca melhorou, o score deve ter subido");
+        } else {
+            assert_eq!(sol.score, initial_score, "Se nao melhorou, o score tem que ser mantido");
+        }
+    }
+
+    #[test]
+    fn test_hvnd_neighborhoods_individually_timing() {
+        let data = get_test_data();
+        let sol = create_initial_solution(&data);
+        
+        let mut hvnd = HybridVND::default();
+        
+        for nbh in hvnd.neighborhoods.iter_mut() {
+            nbh.config.max_time_secs = 1; // Força limite de tempo em cada vizinhança
+            nbh.config.max_iterations = 5; // Evita loop infinito em testes se houver falsos positivos
+            
+            let mut sol_clone = sol.clone();
+            let start = Instant::now();
+            let improved = nbh.refine(&mut sol_clone, &data, 42);
+            let duration = start.elapsed();
+            
+            assert!(duration.as_secs() <= 2, "Vizinhança extrapolou limite de tempo!");
+            if improved {
+                assert!(sol_clone.score > sol.score, "Melhoria reportada, mas score nao subiu");
+            }
+        }
     }
 }

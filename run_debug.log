@@ -1,0 +1,5 @@
+--- Wave Order Picking Solver ---
+Instance: datasets/x/instance_0010.txt
+Strategy: h_bpso:2:100:600+sh:0.05+hvnd
+Seed: 42
+---------------------------------

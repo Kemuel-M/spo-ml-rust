@@ -1,5 +1,6 @@
 use spo_ml_rust::solution::{ChallengeSolution, ProblemData, DenseItem};
 use spo_ml_rust::evaluator::{StockBalanceEvaluator, Evaluator, Move};
+use spo_ml_rust::io::read_input;
 use std::collections::HashMap;
 use std::sync::Arc;
 use fixedbitset::FixedBitSet;
@@ -95,6 +96,9 @@ fn create_mock_data() -> ProblemData {
         stock_matrix,
         item_locations_bits,
         order_required_aisles: Arc::new(order_required_aisles),
+        aisle_to_orders_req: Arc::new(vec![]),
+        all_order_indices: vec![],
+        order_initial_aisles_count: vec![],
     }
 }
 
@@ -141,6 +145,44 @@ fn test_evaluator_aggressive_flow() {
     assert!(!eval.aisles.contains(3));
     assert_eq!(eval.current_total_items(), 15);
     assert!((eval.current_objective() - 7.5).abs() < 1e-6);
+}
+
+#[test]
+fn test_fluxo_completo_do_avaliador() {
+    let data = read_input("datasets/x/instance_0010.txt", false).expect("Failed to load dataset");
+    
+    let mut sol = ChallengeSolution::new(data.orders.len(), data.aisles.len());
+    
+    // Inicia um estado válido simples: preenche com os 5 primeiros pedidos e todos corredores necessários
+    sol.orders.insert(0);
+    sol.orders.insert(1);
+    sol.orders.insert(2);
+    sol.orders.insert(3);
+    sol.orders.insert(4);
+    
+    for &a in data.order_required_aisles[0].iter() { sol.aisles.insert(a); }
+    for &a in data.order_required_aisles[1].iter() { sol.aisles.insert(a); }
+    for &a in data.order_required_aisles[2].iter() { sol.aisles.insert(a); }
+    for &a in data.order_required_aisles[3].iter() { sol.aisles.insert(a); }
+    for &a in data.order_required_aisles[4].iter() { sol.aisles.insert(a); }
+
+    let mut eval = StockBalanceEvaluator::new(&sol, &data);
+    
+    let total_items_inicial = eval.current_total_items();
+    assert!(total_items_inicial > 0, "Deveria ter itens na solução inicial");
+
+    // Roda um fluxo de transações complexo (troca pedido 0 por pedido 5)
+    let is_valid = eval.validate_move(&Move::OrderSwap(0, 5), &data);
+    
+    if is_valid {
+        eval.try_apply_order_swap(0, 5, &data);
+        eval.commit();
+        let total_items_final = eval.current_total_items();
+        assert!(total_items_final > 0, "Deveria ter itens após swap");
+    } else {
+        eval.rollback();
+        assert_eq!(total_items_inicial, eval.current_total_items(), "Rollback deve restaurar o total inicial");
+    }
 }
 
 #[test]

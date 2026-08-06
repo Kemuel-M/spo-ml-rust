@@ -17,7 +17,7 @@ DATASET = "x"               # Opções: "a", "b", "x"
 SELECTED_INSTANCES = ["instance_0010.txt"]
 
 SEED = "0"                  # Semente aleatória (use "0" para semente do sistema)
-TIMEOUT_LIMIT = 600         # Tempo máximo por instância em segundos (PASSADO PARA O RUST)
+TIMEOUT_LIMIT = 200         # Tempo máximo por instância em segundos (PASSADO PARA O RUST)
 
 # Limite de instâncias a processar (0 para processar todas do diretório).
 # Nota: Este parâmetro é ignorado caso SELECTED_INSTANCES não esteja vazia.
@@ -47,7 +47,7 @@ CONSTRUCTIVES = ["sh:0.05"]
 
 # Estratégias de busca local / memético
 # Pode ser uma string única ou uma lista de strings. O script testará todas as combinações.
-LOCAL_SEARCHES = ["hvnd"]   # ["none", "vnd", "hvnd", "tabu", "lahc", "swap", "insert", "remove"]
+LOCAL_SEARCHES = ["none"]   # ["none", "vnd", "hvnd", "tabu", "lahc", "swap", "insert", "remove"]
 
 # --- Caminhos de Arquivos ---
 BINARY_PATH = "./target/release/spo-ml-rust"

@@ -1,0 +1,9 @@
+Iniciando Benchmark [X]
+Meta-heurística Base: h_bpso
+Construtivos: sh:0.05
+Buscas Locais: hvnd
+Instâncias (1 selecionadas): instance_0010.txt
+Rodadas por Instância: 1
+----------------------------------------------------------------------------------------------------
+Processando instance_0010.txt:
+  [sh:0.05+hvnd] Run 01... 
