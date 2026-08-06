@@ -99,7 +99,24 @@ impl ConstructiveAlgorithm for RandomGreedy {
             if rcl.is_empty() { break; }
 
             let limit = (rcl.len() as f64 * self.alpha).max(1.0) as usize;
-            let chosen_idx = if self.alpha == 0.0 { 0 } else { rng.random_range(0..limit.min(rcl.len())) };
+            let actual_limit = limit.min(rcl.len());
+            
+            let chosen_idx = if self.alpha == 0.0 || actual_limit <= 1 { 
+                0 
+            } else {
+                let rcl_slice = &rcl[0..actual_limit];
+                let total_weight: f64 = rcl_slice.iter().map(|c| c.score).sum();
+                let mut rng_val = rng.random::<f64>() * total_weight;
+                let mut chosen = actual_limit - 1;
+                for (i, c) in rcl_slice.iter().enumerate() {
+                    if rng_val <= c.score {
+                        chosen = i;
+                        break;
+                    }
+                    rng_val -= c.score;
+                }
+                chosen
+            };
             let chosen = rcl.remove(chosen_idx);
             
             for remaining in rcl { heap.push(remaining); }

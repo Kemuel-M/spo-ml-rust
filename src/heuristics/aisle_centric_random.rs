@@ -53,10 +53,24 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
             
             let (min_s, max_s) = candidates.iter().fold((f64::MAX, f64::MIN), |(min, max), c| (min.min(c.1), max.max(c.1)));
             let threshold = max_s - self.alpha * (max_s - min_s);
-            let rcl: Vec<usize> = candidates.into_iter().filter(|c| c.1 >= threshold).map(|c| c.0).collect();
+            let rcl: Vec<(usize, f64)> = candidates.into_iter().filter(|c| c.1 >= threshold).collect();
             
             if rcl.is_empty() { break; }
-            let next_aid = *rcl.choose(&mut rng).unwrap();
+            let next_aid = if rcl.len() <= 1 {
+                rcl[0].0
+            } else {
+                let total_weight: f64 = rcl.iter().map(|&(_, s)| s).sum();
+                let mut rng_val = rng.random::<f64>() * total_weight;
+                let mut chosen = rcl.last().unwrap().0;
+                for &(id, s) in &rcl {
+                    if rng_val <= s {
+                        chosen = id;
+                        break;
+                    }
+                    rng_val -= s;
+                }
+                chosen
+            };
 
             available_aisles.remove(&next_aid);
             curr_sol.aisles.insert(next_aid);
@@ -100,12 +114,25 @@ impl ConstructiveAlgorithm for AisleCentricRandom {
                     .fold((f64::MAX, f64::MIN), |(min, max), &(_, s)| (min.min(s), max.max(s)));
                 
                 let threshold = max_s - self.alpha * (max_s - min_s);
-                let rcl: Vec<usize> = scored_orders.into_iter()
+                let rcl: Vec<(usize, f64)> = scored_orders.into_iter()
                     .filter(|&(_, s)| s >= threshold)
-                    .map(|(oid, _)| oid)
                     .collect();
 
-                let chosen_oid = *rcl.choose(&mut rng).unwrap();
+                let chosen_oid = if rcl.len() <= 1 {
+                    rcl[0].0
+                } else {
+                    let total_weight: f64 = rcl.iter().map(|&(_, s)| s).sum();
+                    let mut rng_val = rng.random::<f64>() * total_weight;
+                    let mut chosen = rcl.last().unwrap().0;
+                    for &(id, s) in &rcl {
+                        if rng_val <= s {
+                            chosen = id;
+                            break;
+                        }
+                        rng_val -= s;
+                    }
+                    chosen
+                };
 
                 for item in &data.dense_orders[chosen_oid] {
                     total_curr_stock[item.id] -= item.qty;
