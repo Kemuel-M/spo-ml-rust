@@ -1,0 +1,154 @@
+Challenge Rules
+O Problema da Seleção de Pedidos Ótima
+
+As equipes que desejarem usar um resolvedor de Programação Inteira (ILP) devem utilizar o cplex 22.11 ou o or-tools 4.11.
+Os códigos devem ser escritos em java. Nenhuma outra linguagem será aceita.
+
+# Entrada
+A entrada será fornecida em um arquivo de texto com o seguinte formato:
+•Primeira linha: contém três inteiros o, i e a, que representam, respectiva-
+mente, o número de pedidos, itens e corredores.
+•Próximas o linhas: cada linha começa com um inteiro k, seguido por k
+pares de inteiros, representando o número do item e o número de unida-
+des solicitadas pelo pedido. Dentro deste grupo de linhas e, para j em
+{1, . . . , o}, a j-ésima linha contém dados relacionados ao pedido indexado
+por j −1, significando que os pedidos são numerados de 0 a o −1. Além
+disso, assume-se que os itens estão indexados de 0 a i −1.
+•Próximas a linhas: cada linha começa com um inteiro l, seguido por l pa-
+res de inteiros, representando o número do item e o número de unidades
+disponíveis no corredor. Similar ao caso dos pedidos, dentro deste grupo
+de linhas e, para j em {1, . . . , a}, a j-ésima linha contém dados relacio-
+nados ao corredor indexado por j −1, significando que os corredores são
+numerados de 0 a a −1.
+•Última linha: contém dois inteiros, LB e UB, que são os limites inferior
+e superior do tamanho da wave (um subconjunto de pedidos), respectiva-
+mente. Esses limites são expressos em quantidade de unidades de itens.
+Assim, a entrada para a instância descrita na Seção de Exemplos do arquivo
+de descrição do problema seria:
+5 5 5
+2 0 3 2 1
+2 1 1 3 1
+2 2 1 4 2
+4 0 1 2 2 3 1 4 1
+1 1 1
+4 0 2 1 1 2 1 4 1
+4 0 2 1 1 2 2 4 1
+3 1 2 3 1 4 2
+4 0 2 1 1 3 1 4 1
+4 1 1 2 2 3 1 4 2
+5 12
+# Saída
+A saída deve ser um arquivo de texto com o seguinte formato:
+•Primeira linha: contém um inteiro n, o número de pedidos na wave (sub-
+conjunto de pedidos) retornada pelo algoritmo.
+•Próximas n linhas: cada linha contém um inteiro representando o índice
+de um pedido da wave computada.
+•Linha seguinte: contém um inteiro m que representa o número de corre-
+dores visitados na wave computada.
+•Próximas m linhas: cada linha contém um inteiro representando o índice
+de um corredor visitado pela wave computada.
+Por exemplo, a saída para a última solução do exemplo descrito na Seção 3
+do arquivo de descrição do problema seria:
+4
+0
+1
+2
+4
+2
+1
+3
+
+# 4 Requisitos de código
+Como mencionado na Seção 2.5, o código deve ser escrito em Java, especifica-
+mente, na versão 17. Para facilitar o processo de desenvolvimento e avaliação,
+fornecemos um template para o projeto a ser desenvolvido no github que pode
+ser clonado este repositório.
+Uma vez que o projeto tenha sido clonado para seu repositório local, o di-
+retório raiz, chamado ChallengeSBPO2025 (não o altere!), conterá os seguintes
+elementos:
+checker.py run_challenge.py pom.xml src
+O arquivo checker.py é um script Python que verifica se uma solução é viável
+(veja a Seção 4.3), enquanto o script run challenge.py pode facilmente com-
+pilar e executar um código Java, em conformidade com as especificações deste
+documento, sobre um conjunto de instâncias. Como maven será usado para
+construir o projeto, o pom.xml (Project Object Model) também é fornecido.
+Ele contém informações sobre o projeto e detalhes de configuração usados pelo
+maven. Não altere este arquivo, exceto se o cplex ou o or-tools forem
+requeridos pelo código desenvolvido para o desafio (veja as Seções 4.1 e
+4.2 abaixo). O diretório src é onde os códigos Java devem residir.
+Após clonar o projeto disponibilizado no github, seguindo o caminho /src/
+main/java/org/sbpo2025/challenge/ três arquivos serão encontrados:
+1. Challenge.java. Este é o programa main do projeto e define a classe
+Challenge que contém métodos para ler o arquivo de entrada e escrever
+o arquivo de saída.
+2. ChallengeSolver.java. Este arquivo contém um código incompleto que
+deve ser preenchido pelas Equipes para implementar os algorit-
+mos propostos. Ele define a classe ChallengeSolver que é chamada
+por Challenge.java e inclui algumas funções auxiliares para verificar a
+viabilidade e calcular o valor objetivo de uma solução candidata.
+3. ChallengeSolution.java. Este arquivo define uma estrutura básica que
+representa uma solução para o problema.
+Embora seja altamente recomendado, as equipes não são obrigadas a manter
+o código em Challenge.java inalterado. No entanto, independentemente de
+quaisquer modificações feitas, o arquivo executável resultante deve aceitar
+dois argumentos: os caminhos dos arquivos de entrada e saída, nessa
+ordem.
+O projeto pode ser compilado usando o comando maven emitido a partir do
+diretório raiz:
+mvn clean package
+Isso gerará um arquivo jar, chamado ChallengeSBPO2025-1.0.jar, no diretório target.
+Para executar o arquivo jar, o seguinte comando pode ser emitido a partir
+do diretório raiz do projeto:
+java -jar target/ChallengeSBPO2025-1.0.jar
+<input-file> <output-file>
+onde <input-file> é o caminho para o arquivo de entrada a ser lido, e <output-file>
+é o caminho para o arquivo de saída a ser escrito.
+4.1 Usando cplex
+Se o cplex for utilizado pelo algoritmo proposto, todas as linhas do bloco de
+dependências do arquivo pom.xml devem ser descomentadas. Além disso, an-
+tes de compilar o código, as dependências do cplex devem ser adicionadas ao
+repositório maven usando o seguinte comando:
+mvn install:install-file -Dfile=<cplex-jar-file> -DgroupId=cplex -DartifactId=cplex -Dversion=22.11 -Dpackaging=jar
+onde <cplex-jar-file> é o caminho para o arquivo cplex jar (por exem-
+plo, /Applications/CPLEX_Studio2211/cplex/lib/cplex.jar). Observe que
+a versão 22.11 do resolvedor será utilizada para avaliação.
+Depois disso, para executar o arquivo de aplicação jar com o cplex, você
+deve fornecer o caminho para a biblioteca do cplex, usando o seguinte comando:
+java -Djava.library.path=<cplex-library-path> -jar target/ChallengeSBPO2025-1.0.jar <input-file> <output-file>
+onde <cplex-library-path> é o caminho para a biblioteca do cplex na sua
+instalação local (por exemplo, /Applications/CPLEX_Studio2211/opl/bin/
+arm64_osx/).
+4.2 Usando or-tools
+Se você decidir usar or-tools, deve primeiro instalar or-tools para Java,
+seguindo as instruções nesta página. Observe que a versão 9.11 da biblioteca
+será utilizada para avaliação. Em seguida, você deve descomentar a respectiva
+dependência no arquivo pom.xml.
+Finalmente, você pode executar o arquivo jar com or-tools usando o
+seguinte comando:
+java -Djava.library.path=<ortools-library-path> -jar target/ChallengeSBPO2025-1.0.jar <input-file> <output-file>
+onde <ortools-library-path> é o caminho para a biblioteca or-tools (por
+exemplo, $HOME/Documents/or-tools/build/lib/).
+4.3 Verificador de solução
+Um script Python, chamado checker.py, é fornecido para verificar a viabili-
+dade de uma solução com base nos arquivos de entrada e saída passados como
+parâmetros, além de calcular o valor objetivo. O script pode ser executado
+usando o seguinte comando:
+python3 checker.py <input-file> <output-file>
+4.4 Programa Python para a execução do desafio
+O script run challenge.py pode ser usado para compilar e executar o código
+Java para um conjunto de instâncias. Ele requer o caminho do código fonte
+(que contém o arquivo pom.xml), o diretório de entrada (instâncias) e o diretório
+de saída (para armazenar as soluções) como parâmetros, conforme mostrado
+abaixo:
+python3 run_challenge.py <source-code-path> <input-directory> <output-directory>
+Para executar este script, você precisará do comando timeout (ou gtimeout
+no macOS) instalado. Você pode instalá-lo usando o comando apt-get install
+coreutils (ou equivalente) no Linux ou brew install coreutils no macOS.
+O script permite que o usuário configure os caminhos para as bibliotecas do
+cplex e do or-tools, além de interromper automaticamente a execução do
+programa caso o limite de tempo de 10 minutos seja excedido.
+4.5 Tempo limite de execução
+Lembre-se de que um limite de tempo de 10 minutos será alocado para computar
+uma solução para cada instância. Portanto, recomenda-se usar algum pacote
+Java, como StopWatch, para monitorar o tempo de execução e garantir que um
+arquivo de saída seja escrito dentro deste limite de tempo.

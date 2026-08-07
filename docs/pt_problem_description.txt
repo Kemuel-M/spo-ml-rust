@@ -1,0 +1,364 @@
+Desafio SBPO 2025 – Descrição do Problema
+O Problema da Seleção de Pedidos Ótima
+Janeiro de 2025
+
+Conteúdo
+1 Introdução
+
+2
+
+2 Descrição do problema
+2.1 Definições e notações . . . . . . . . . . . . . . . . . . . . . . . . .
+2.2 Conjuntos . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.3 Constantes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+2.4 Objetivo do problema e restrições . . . . . . . . . . . . . . . . . .
+
+2
+2
+4
+4
+4
+
+3 Exemplo
+
+5
+
+1
+
+Desafio de Otimização – SBPO 2025 / Mercado Livre
+
+1
+
+Introdução
+
+A jornada de um pacote dentro da rede de entregas do mercado livre começa
+muito antes da fase de transporte. Uma vez que um pedido é feito por um
+cliente, ele entra em um backlog de pedidos a coletar e recebe um prazo de processamento com base no tempo de entrega prometido. A próxima etapa envolve
+a coleta no armazém dos itens que compõem o pedido para posterior embalagem
+e transporte. Obviamente, a coleta de itens de um pedido individualmente é
+menos eficiente do que a coleta realizada ao agrupar-se subconjuntos de pedidos,
+chamados de waves de pedidos ou, simplesmente, waves. Isso porque, a coleta
+simultânea de pedidos permite aproveitar as sinergias entre os locais de coleta
+dos itens dos diferentes pedidos. O processo de selecionar sucessivamente do
+backlog o próximo subconjunto de pedidos a serem coletados, por meio de uma
+ou várias rotas, é conhecido como coleta de pedidos em waves. Entretanto,
+para maximizar a produtividade da operação de coleta, a seleção dos pedidos
+que irão compor a próxima wave deve ser feita de forma criteriosa. Assim, o
+foco deste desafio é propor algoritmos para resolver o problema de encontrar
+uma wave de pedidos ótima, maximizando a produtividade da coleta.
+
+2
+
+Descrição do problema
+
+Nesta seção, descreveremos o problema em detalhes.
+
+2.1
+
+Definições e notações
+
+Começamos dando definições e notações básicas.
+• Item: um produto que pode ser solicitado.
+• Pedido: uma lista especı́fica de itens solicitados por um cliente junto com
+suas quantidades.
+• Coleta: o processo de recuperar produtos do armazém.
+• Backlog: o conjunto de pedidos cujos itens ainda não foram coletados.
+• Wave: um subconjunto de pedidos do backlog selecionados para serem
+processados (ou roteados) juntos, com o objetivo de maximizar a produtividade das operações de coleta.
+• Corredor: para fins deste desafio, um armazém pode ser concebido como
+um único piso retangular contendo fileiras paralelas de estantes compostas múltiplas camadas de prateleiras, cada uma delas com um endereço
+associado. Nestas prateleiras são armazenados os itens que podem fazer
+parte de um pedido. Os espaços livres entre duas fileiras de estantes consecutivas são chamados de corredores e permitem a circulação de pessoas
+ou equipamentos que fazem a coleta dos itens presentes em um pedido.
+
+Desafio de Otimização – SBPO 2025 / Mercado Livre
+
+Endereço
+Corredor
+
+Piso
+
+Figura 1: Layout do piso de um armazém com seus elementos básicos.
+Na Figura 1 vê-se um exemplo de um diagrama representando o piso de
+armazém.
+Abaixo estão os conjuntos e constantes necessárias para definir o problemaalvo deste desafio.
+
+Desafio de Otimização – SBPO 2025 / Mercado Livre
+
+2.2
+
+Conjuntos
+
+O
+
+Conjunto de pedidos no backlog.
+
+Io
+
+Subconjunto de itens solicitados pelo pedido o ∈ O.
+S
+Conjunto de itens, onde I = o∈O Io .
+
+I
+Ai
+A
+
+2.3
+
+Subconjunto de corredores contendo pelo menos uma unidade do item i.
+S
+Conjunto de corredores, onde A = i∈I Ai .
+
+Constantes
+
+uoi
+
+Número de unidades do item i ∈ I solicitado pelo pedido o ∈ O.
+
+uai
+
+Número de unidades do item i ∈ I disponı́veis no corredor a ∈ A.
+
+LB / UB
+
+Limite inferior / superior do tamanho da wave (definido abaixo).
+
+2.4
+
+Objetivo do problema e restrições
+
+O objetivo do problema de coleta de pedidos em waves é selecionar um subconjunto de pedidos do backlog, ou seja, a wave, e um subconjunto de corredores
+(locais de coleta) que maximizem a produtividade do processo de coleta. Isso
+é conseguido ao criar condições favoráveis à geração de rotas de coleta eficientes. Para este desafio, vamos explorar uma dessas condições, que é concentrar
+os itens da wave na menor quantidade possı́vel de corredores, respeitando as
+restrições descritas abaixo.
+De maneira mais formal, seja O′ ⊂ O o subconjunto de pedidos na wave, e
+′
+A ⊂ A o subconjunto de corredores que serão visitados para coletar todos os
+itens em O′ . O objetivo é maximizar o número de itens coletados por corredor
+visitado, matematicamente representado por:
+X X
+uoi
+max
+
+o∈O ′ i∈Io
+|A′ |
+
+(1)
+
+Existem essencialmente três famı́lias de restrições. As duas primeiras estabelecem limites operacionais no número total de unidades que precisam ser
+coletadas para os pedidos incluı́dos na wave. Elas são expressas como:
+X X
+uoi ≥ LB,
+(2)
+o∈O ′ i∈Io
+
+X X
+o∈O ′ i∈Io
+
+uoi
+
+≤ UB.
+
+(3)
+
+Desafio de Otimização – SBPO 2025 / Mercado Livre
+
+A terceira famı́lia de restrições assegura que os corredores selecionados tenham
+armazenamento suficiente para cada um dos itens incluı́dos nos pedidos dentro
+da wave. Isso se traduz em:
+X
+X
+uoi ≤
+uai ,
+∀i ∈ Io com o ∈ O′ .
+(4)
+o∈O ′
+
+a∈A′
+
+Qualquer par (O′ , A′ ) de O × A que satisfaça às restrições (2), (3) e (4)
+constitui uma solução viável para o problema de coleta de pedidos em wave.
+Neste contexto, a wave O′ também é considerada viável.
+No entanto, observe que pode haver múltiplos candidatos para o subconjunto
+A′ de corredores selecionados que satisfaçam a restrição (4) para a wave dada.
+Naturalmente, o objetivo é identificar entre esses subconjuntos um que maximize
+a função objetivo (1).
+
+3
+
+Exemplo
+
+Considere o seguinte exemplo com 5 pedidos, 5 itens diferentes e 5 corredores.
+O número de unidades de cada item solicitado por cada pedido no backlog é
+dado na Tabela 1, enquanto a disponibilidade de itens em cada corredor é dada
+na Tabela 2. Os limites inferior e superior para o tamanho da wave são 5 e 12,
+respectivamente.
+Pedido
+
+Item 0
+
+Item 1
+
+Item 2
+
+Item 3
+
+Item 4
+
+0
+
+3
+
+0
+
+1
+
+0
+
+0
+
+1
+
+0
+
+1
+
+0
+
+1
+
+0
+
+2
+
+0
+
+0
+
+1
+
+0
+
+2
+
+3
+
+1
+
+0
+
+2
+
+1
+
+1
+
+4
+
+0
+
+1
+
+0
+
+0
+
+0
+
+Tabela 1: Número de unidades de cada item solicitado por cada pedido.
+
+Desafio de Otimização – SBPO 2025 / Mercado Livre
+
+Corredor
+
+Item 0
+
+Item 1
+
+Item 2
+
+Item 3
+
+Item 4
+
+0
+
+2
+
+1
+
+1
+
+0
+
+1
+
+1
+
+2
+
+1
+
+2
+
+0
+
+1
+
+2
+
+0
+
+2
+
+0
+
+1
+
+2
+
+3
+
+2
+
+1
+
+0
+
+1
+
+1
+
+4
+
+0
+
+1
+
+2
+
+1
+
+2
+
+Tabela 2: Número de unidades de cada item disponı́vel em cada corredor.
+Alguns exemplos de waves viáveis, e suas atribuições de corredores, são:
+• Pedidos 0 e 4, usando corredores 0 e 1.
+– Total de unidades: 5;
+– Número de corredores: 2;
+– Valor objetivo: 2.5.
+• Pedidos 0, 2 e 3, usando corredores 1, 3 e 4.
+– Total de unidades: 12;
+– Número de corredores: 3;
+– Valor objetivo: 4.
+• Pedidos 0, 1, 2 e 4, usando corredores 1 e 3.
+– Total de unidades: 10;
+– Número de corredores: 2;
+– Valor objetivo: 5.
+Na última solução, o número médio de itens coletados por corredor (o valor
+objetivo) é 5, maior que os das outras soluções mostradas, tornando a última
+solução preferı́vel em relação às demais. De fato, pode-se mostrar que esta
+solução é ótima para a instância dada.
+
+
