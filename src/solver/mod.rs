@@ -168,9 +168,13 @@ impl<'a> ChallengeSolver<'a> {
                     constructive, local_search, config: grasp_config
                 })
             },
-            MetaheuristicType::Ils { dimension, iterations } => Box::new(crate::metaheuristics::Ils { 
-                constructive, local_search, dimension, max_iterations: iterations, max_time_secs: self.config.meta.ils.max_time_secs 
-            }),
+            MetaheuristicType::Ils { dimension, iterations } => {
+                let mut ils_config = self.config.meta.ils.clone();
+                ils_config.iterations = iterations;
+                Box::new(crate::metaheuristics::Ils { 
+                    constructive, local_search, dimension, config: ils_config 
+                })
+            },
             MetaheuristicType::SimulatedAnnealing { dimension, t0, cooling } => {
                 let mut sa_config = self.config.meta.sa.clone();
                 sa_config.t0 = t0; sa_config.cooling = cooling;
@@ -199,8 +203,6 @@ impl<'a> ChallengeSolver<'a> {
                     p_orders: self.config.meta.bpso.p_orders,
                     turbulence_base: self.config.meta.bpso.turbulence_base,
                     turbulence_high: self.config.meta.bpso.turbulence_high,
-                    score_threshold_orders: self.config.meta.bpso.score_threshold_orders,
-                    score_threshold_aisles: self.config.meta.bpso.score_threshold_aisles,
                     log_frequency: self.config.meta.bpso.log_frequency,
                 };
                 

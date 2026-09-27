@@ -68,7 +68,7 @@ impl SolverStrategy for GeneticAlgorithm {
             // Fits usa o cache O(1) da solução (Prioridade 1)
             let fits: Vec<(usize, f64)> = pop.iter().enumerate().map(|(i, ind)| (i, ind.score)).collect();
             let mut sorted: Vec<usize> = (0..pop.len()).collect();
-            sorted.sort_by(|&a, &b| fits[b].1.partial_cmp(&fits[a].1).unwrap_or(std::cmp::Ordering::Equal));
+            sorted.sort_unstable_by(|&a, &b| fits[b].1.partial_cmp(&fits[a].1).unwrap_or(std::cmp::Ordering::Equal));
             
             if fits[sorted[0]].1 > best_all.score { 
                 best_all = pop[sorted[0]].clone(); 

@@ -45,7 +45,7 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
         .map(|m| {
             let mut v: Vec<DenseItem> = m.iter().map(|(&id, &qty)| DenseItem { id, qty }).collect();
             if deterministic {
-                v.sort_by_key(|it| it.id);
+                v.sort_unstable_by_key(|it| it.id);
             }
             v
         })
@@ -55,7 +55,7 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
         .map(|m| {
             let mut v: Vec<DenseItem> = m.iter().map(|(&id, &qty)| DenseItem { id, qty }).collect();
             if deterministic {
-                v.sort_by_key(|it| it.id);
+                v.sort_unstable_by_key(|it| it.id);
             }
             v
         })
@@ -75,7 +75,7 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
     }
 
     let mut orders_sorted_by_size: Vec<usize> = (0..n_orders).collect();
-    orders_sorted_by_size.sort_by(|&a, &b| {
+    orders_sorted_by_size.sort_unstable_by(|&a, &b| {
         order_total_items[b].cmp(&order_total_items[a])
     });
 

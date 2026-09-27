@@ -16,7 +16,7 @@ impl ConstructiveAlgorithm for AisleCentricStatic {
         let mut total_items = 0;
 
         let mut all_aisles: Vec<usize> = (0..data.aisles.len()).collect();
-        all_aisles.sort_by(|&a, &b| {
+        all_aisles.sort_unstable_by(|&a, &b| {
             let sa: u32 = data.aisles[a].values().sum();
             let sb: u32 = data.aisles[b].values().sum();
             sb.cmp(&sa)

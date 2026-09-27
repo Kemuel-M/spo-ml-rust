@@ -1,6 +1,7 @@
 use crate::solution::{ChallengeSolution, ProblemData};
 use log::info;
 use crate::heuristics::{SolverStrategy, ConstructiveAlgorithm, LocalSearchAlgorithm, utils};
+use crate::heuristics::random_key_decoder::RandomKeyDecoder;
 use crate::local_searchs::SearchDimension;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
@@ -18,7 +19,6 @@ pub struct BPSOConfig {
     pub stag_threshold_escape: f64, pub stag_threshold_panic: f64,
     pub p_orders: f64,
     pub turbulence_base: f64, pub turbulence_high: f64,
-    pub score_threshold_orders: f64, pub score_threshold_aisles: f64,
     pub log_frequency: usize,
 }
 
@@ -155,7 +155,14 @@ impl SolverStrategy for BPSO {
                 
                 let seed_construct = p.rng.next_u64();
                 let t_start_const = Instant::now();
-                let mut sol = self.constructive.construct(data, seed_construct, Some((&p.scores_buffer, p.dimension)));
+                // --- CONFIGURAÇÃO DO RANDOM KEY DECODER ---
+                // MODO 1: BPSO Clássico Guiado (Comportamento do guided_construct original) - threshold: Some(0.5) -> Exige que a partícula aprove a inserção.
+                // MODO 2: Snapshot & Fallback (Ignora magnitudes, foca apenas no Rank) - threshold: None -> Salva o pico ótimo de densidade (desliga os cortes do BPSO).
+                let decoder = RandomKeyDecoder {
+                    is_stochastic: false,
+                    threshold: Some(0.5),
+                };
+                let mut sol = decoder.construct(data, seed_construct, Some((&p.scores_buffer, p.dimension)));
                 let time_const = t_start_const.elapsed().as_secs_f64();
                 
                 sol.score = utils::compute_objective(&sol, data);

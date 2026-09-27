@@ -9,14 +9,18 @@ import re
 # =============================================================================
 
 # --- Dataset e Execução ---
-DATASET = "a"               # Opções: "a", "b", "x"
+DATASET = "x"               # Opções: "a", "b", "x"
 
 # Lista de instâncias específicas para rodar. Se a lista não estiver vazia, rodará apenas estas instâncias.
 # Deixe vazia (SELECTED_INSTANCES = []) para rodar todas as instâncias do dataset (sujeito ao MAX_INSTANCES).
 # Exemplo: SELECTED_INSTANCES = ["instance_0014.txt", "instance_0015.txt"]
+# ----- De 1 a 10
 #SELECTED_INSTANCES = ["instance_0001.txt", "instance_0002.txt", "instance_0003.txt", "instance_0004.txt", "instance_0005.txt", "instance_0006.txt", "instance_0007.txt", "instance_0008.txt", "instance_0009.txt", "instance_0010.txt"]
+# ----- De 11 a 15
 #SELECTED_INSTANCES = ["instance_0011.txt", "instance_0012.txt", "instance_0013.txt", "instance_0014.txt", "instance_0015.txt"]
-SELECTED_INSTANCES = ["instance_0010.txt"]
+# ----- especificas
+SELECTED_INSTANCES = ["instance_0001.txt"]
+#SELECTED_INSTANCES = ["instance_0004.txt", "instance_0006.txt", "instance_0008.txt"]
 
 SEED = "0"                  # Semente aleatória (use "0" para semente do sistema)
 TIMEOUT_LIMIT = 600         # Tempo máximo por instância em segundos (PASSADO PARA O RUST)
@@ -25,7 +29,7 @@ TIMEOUT_LIMIT = 600         # Tempo máximo por instância em segundos (PASSADO 
 # Nota: Este parâmetro é ignorado caso SELECTED_INSTANCES não esteja vazia.
 MAX_INSTANCES = 0           
 
-RUNS_PER_INSTANCE = 3      # Quantidade de vezes que cada instância será executada
+RUNS_PER_INSTANCE = 10      # Quantidade de vezes que cada instância será executada
 
 # --- Parâmetros da Meta-heurística ---
 # Meta-heurística base

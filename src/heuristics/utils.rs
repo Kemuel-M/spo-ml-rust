@@ -142,7 +142,7 @@ pub fn guarantee_feasibility(solution: &mut ChallengeSolution, data: &ProblemDat
     }
     if eval.current_total_items() > data.wave_size_ub {
         let mut orders: Vec<usize> = eval.get_active_orders().ones().collect();
-        orders.sort_by(|&a, &b| data.order_total_items[a].cmp(&data.order_total_items[b]));
+        orders.sort_unstable_by(|&a, &b| data.order_total_items[a].cmp(&data.order_total_items[b]));
         for o in orders {
             if eval.current_total_items() <= data.wave_size_ub { break; }
             eval.try_apply_order_remove(o, data);

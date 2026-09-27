@@ -35,6 +35,11 @@ impl Default for GraspConfig {
 pub struct IlsConfig {
     pub iterations: usize,
     pub max_time_secs: u64,
+    pub walkers: usize,
+    pub perturbation_base: f64,
+    pub perturbation_max: f64,
+    pub stagnation_limit: usize,
+    pub log_frequency: usize,
 }
 
 impl Default for IlsConfig {
@@ -42,6 +47,11 @@ impl Default for IlsConfig {
         Self {
             iterations: 100,
             max_time_secs: 150,
+            walkers: 20,
+            perturbation_base: 0.15,
+            perturbation_max: 0.40,
+            stagnation_limit: 15,
+            log_frequency: 10,
         }
     }
 }
@@ -159,8 +169,6 @@ pub struct BpsoConfig {
     pub ls_prob_high: f64,
     pub turbulence_base: f64,
     pub turbulence_high: f64,
-    pub score_threshold_orders: f64,
-    pub score_threshold_aisles: f64,
     pub log_frequency: usize,
 }
 
@@ -185,8 +193,6 @@ impl Default for BpsoConfig {
             ls_prob_high: 0.3,
             turbulence_base: 0.05,
             turbulence_high: 0.20,
-            score_threshold_orders: 0.5,
-            score_threshold_aisles: 0.2,
             log_frequency: 10,
         }
     }

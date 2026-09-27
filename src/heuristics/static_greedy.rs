@@ -14,7 +14,7 @@ impl ConstructiveAlgorithm for StaticGreedy {
             let score = if req.is_empty() { 0.0 } else { total as f64 / req.len() as f64 };
             scored_orders.push((idx, score));
         }
-        scored_orders.sort_by(|a, b| {
+        scored_orders.sort_unstable_by(|a, b| {
             b.1.partial_cmp(&a.1)
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| a.0.cmp(&b.0))
