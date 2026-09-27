@@ -26,10 +26,6 @@ pub fn update_stock_dense(order_items: &[DenseItem], item_to_aisles: &[Vec<usize
             *s -= take;
             qty -= take;
         }
-        if qty > 0 {
-            // This should not happen if is_stock_sufficient_dense was true
-            // unless solution_aisles doesn't contain the req aisles.
-        }
     }
 }
 

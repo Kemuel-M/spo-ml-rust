@@ -31,15 +31,15 @@ impl SolverStrategy for SimulatedAnnealing {
         let orders_vec: Vec<usize> = (0..data.orders.len()).collect();
         let aisles_vec: Vec<usize> = (0..data.aisles.len()).collect();
 
-        // 2. Calcula o T0 com um RNG independente
+        // Calcula T0 inicial com semente independente
         let mut rng_t0 = ChaCha8Rng::seed_from_u64(seed + 9999);
         let mut initial_temp = self.calculate_initial_temp(data, &curr_sol, curr_obj, &orders_vec, &aisles_vec, &mut rng_t0);
         
-        // 3. O Fallback de Sobrevivência
+        // Garante temperatura mínima proporcional ao score inicial
         initial_temp = initial_temp.max(curr_obj * self.config.survival_fallback_ratio);
         let mut temp = initial_temp;
 
-        // 4. Iterações por temperatura baseadas no tamanho do problema
+        // Iterações por patamar de temperatura baseadas no tamanho do problema
         let n = match self.dimension {
             SearchDimension::Orders => data.orders.len(),
             SearchDimension::Aisles => data.aisles.len(),
@@ -62,7 +62,7 @@ impl SolverStrategy for SimulatedAnnealing {
             
             let mut improved_this_temp = false;
 
-            // 5. Probabilidades Dinâmicas
+            // Probabilidades dinâmicas de vizinhança ao longo do resfriamento
             let progress = (temp / initial_temp).min(1.0);
             
             let swap_prob = (self.config.swap_prob_end - (self.config.swap_prob_end - self.config.swap_prob_start) * progress) as u32; 
@@ -131,7 +131,7 @@ impl SolverStrategy for SimulatedAnnealing {
                     temp_steps, temp, best_obj, start.elapsed().as_secs());
             }
 
-            // 6. Reaquecimento Escalonado com KICK REAL
+            // Reaquecimento adaptativo e perturbação ao detectar estagnação
             if iterations_since_improvement > stagnation_threshold && reheat_count < max_reheats {
                 reheat_count += 1;
                 let reheat_factor = (self.config.reheat_factor_base + self.config.reheat_factor_step * (reheat_count as f64)).min(self.config.reheat_factor_max);
@@ -215,8 +215,7 @@ impl SimulatedAnnealing {
             return self.config.t0; 
         }
         let avg_delta = deltas.iter().sum::<f64>() / deltas.len() as f64;
-        let t0 = -avg_delta / self.config.initial_acceptance_prob.ln(); 
-        t0
+        -avg_delta / self.config.initial_acceptance_prob.ln()
     }
 
     fn get_block_swap(&self, sol: &ChallengeSolution, all: &[usize], data: &ProblemData, rng: &mut impl Rng) -> Option<(Vec<usize>, Vec<usize>)> {

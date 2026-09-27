@@ -43,10 +43,7 @@ impl<'a> ChallengeSolver<'a> {
 
         use crate::heuristics::timer::{TimedConstructive, TimedLocalSearch, TimedSolver};
 
-        let is_metaheuristic = match meta_type {
-            MetaheuristicType::SingleShot => false,
-            _ => true,
-        };
+        let is_metaheuristic = !matches!(meta_type, MetaheuristicType::SingleShot);
 
         // Prepara configuração de Busca Local
         let mut current_ls_config = self.config.ls.clone();
@@ -182,14 +179,14 @@ impl<'a> ChallengeSolver<'a> {
             },
             MetaheuristicType::GeneticAlgorithm { dimension, pop_size, generations } => Box::new(crate::metaheuristics::genetic::GeneticAlgorithm {
                 constructive, local_search, config: crate::metaheuristics::genetic::GAConfig {
-                    dimension, population_size: pop_size, generations: generations,
+                    dimension, population_size: pop_size, generations,
                     mutation_rate: self.config.meta.ga.mutation_rate, elitism_count: (pop_size / 10).max(1),
                     max_time_secs: self.config.meta.ga.max_time_secs, memetic_prob: 0.2, repair_search_limit: 1000, seed: 42, 
                 },
             }),
             MetaheuristicType::Bpso { dimension, pop_size, iterations } => {
                 let b_config = crate::metaheuristics::bpso::BPSOConfig {
-                    dimension, population_size: pop_size, iterations: iterations,
+                    dimension, population_size: pop_size, iterations,
                     w_min: self.config.meta.bpso.w_min, w_max: self.config.meta.bpso.w_max,
                     c1: self.config.meta.bpso.c1, c2: self.config.meta.bpso.c2,
                     c1_escape: self.config.meta.bpso.c1_escape, c2_escape: self.config.meta.bpso.c2_escape,
@@ -206,8 +203,6 @@ impl<'a> ChallengeSolver<'a> {
                     log_frequency: self.config.meta.bpso.log_frequency,
                 };
                 
-                // Override time if provided in the defaults (which we will pass from main)
-                // Actually, let's just make it simpler: read m_val3 in main and set it in the config object before calling build.
                 Box::new(crate::metaheuristics::bpso::BPSO {
                     constructive, local_search, config: b_config
                 })

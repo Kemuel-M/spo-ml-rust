@@ -82,15 +82,12 @@ impl SolverStrategy for Ils {
                     *curr = cand;
                     *curr_obj = cand_obj;
                     *no_imp += 1;
-                } else {
-                    // Rejeita. Se estagnar muito, volta pro best (Path Relinking / Fallback)
+                    // Rejeita a solução. Se estagnar muito, reinicia a partir da melhor solução (Fallback)
                     *no_imp += 1;
                     if *no_imp > self.config.stagnation_limit * 2 {
                         *curr = best.clone();
                         *curr_obj = *best_obj;
-                        *no_imp = 0; // Reinicia a tentativa a partir do best
-                    } else {
-                        // Mantém o curr atual e tenta perturbar de novo na próxima
+                        *no_imp = 0;
                     }
                 }
                 

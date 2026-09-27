@@ -42,7 +42,9 @@ impl ConstructiveAlgorithm for SuperHybrid {
             rng.random_bool(self.p_orders)
         };
         
-        let sol = if is_order {
+        
+        
+        if is_order {
             let strat = RandomGreedy { alpha };
             let mut s = strat.construct(data, seed, weights);
             s.metadata.insert("strategy".to_string(), "orders".to_string());
@@ -54,8 +56,6 @@ impl ConstructiveAlgorithm for SuperHybrid {
             s.metadata.insert("strategy".to_string(), "aisles".to_string());
             s.metadata.insert("alpha".to_string(), alpha.to_string());
             s
-        };
-        
-        sol
+        }
     }
 }

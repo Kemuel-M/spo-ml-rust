@@ -34,13 +34,13 @@ impl SolverStrategy for GeneticAlgorithm {
         let ga_budget = total_budget.mul_f64(0.85); // 85% para evolução
         let _ls_budget = total_budget.mul_f64(0.15); // 15% para polimento final
 
-        // 1. Inicialização Paralela (Prioridade 4)
+        // Inicialização paralela da população
         let mut pop: Vec<ChallengeSolution> = (0..self.config.population_size)
             .into_par_iter()
             .map(|i| self.constructive.construct(data, seed + i as u64, None))
             .collect();
 
-        // Aplicar LS inicial em paralelo
+        // Aplicar busca local inicial em paralelo
         pop.par_iter_mut().enumerate().for_each(|(i, ind)| {
             if ind.feasible {
                 let f_before = ind.score;
@@ -60,12 +60,11 @@ impl SolverStrategy for GeneticAlgorithm {
         
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
 
-        // 2. Loop de Evolução Controlado por Tempo (Prioridade 3)
+        // Loop de evolução controlado por tempo
         let mut generation_count = 0;
         while start.elapsed() < ga_budget && generation_count < self.config.generations {
             generation_count += 1;
             
-            // Fits usa o cache O(1) da solução (Prioridade 1)
             let fits: Vec<(usize, f64)> = pop.iter().enumerate().map(|(i, ind)| (i, ind.score)).collect();
             let mut sorted: Vec<usize> = (0..pop.len()).collect();
             sorted.sort_unstable_by(|&a, &b| fits[b].1.partial_cmp(&fits[a].1).unwrap_or(std::cmp::Ordering::Equal));
@@ -86,7 +85,7 @@ impl SolverStrategy for GeneticAlgorithm {
                 next.push(offspring);
             }
 
-            // Memetismo dinâmico: só aplica se houver tempo
+            // Memetismo dinâmico se houver tempo disponível
             let base_seed = rng.next_u64();
             let can_do_ls = start.elapsed() < ga_budget.mul_f64(0.9); 
 
@@ -108,8 +107,7 @@ impl SolverStrategy for GeneticAlgorithm {
             pop = next;
         }
 
-        // 3. Polimento Final (Prioridade 3)
-        // Usa o tempo restante para uma busca local exaustiva no melhor de todos
+        // Polimento final: busca local exaustiva na melhor solução encontrada
         if start.elapsed() < total_budget {
             let mut final_best = best_all.clone();
             self.local_search.refine(&mut final_best, data, seed + 99999);

@@ -200,6 +200,7 @@ impl Default for BpsoConfig {
 
 /// Agregador de configurações de Metaheurísticas
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct MetaConfig {
     pub grasp: GraspConfig,
     pub ils: IlsConfig,
@@ -208,17 +209,6 @@ pub struct MetaConfig {
     pub bpso: BpsoConfig,
 }
 
-impl Default for MetaConfig {
-    fn default() -> Self {
-        Self {
-            grasp: GraspConfig::default(),
-            ils: IlsConfig::default(),
-            sa: SaConfig::default(),
-            ga: GaConfig::default(),
-            bpso: BpsoConfig::default(),
-        }
-    }
-}
 
 /// Centralização de todos os Hiperparâmetros do Solver
 #[derive(Debug, Clone)]
@@ -228,8 +218,8 @@ pub struct SolverConfig {
     pub ls: LocalSearchConfig,
 }
 
-impl SolverConfig {
-    pub fn default() -> Self {
+impl Default for SolverConfig {
+    fn default() -> Self {
         let max_runtime = Duration::from_secs(150);
         Self {
             max_runtime,
@@ -240,10 +230,13 @@ impl SolverConfig {
                 neighborhood: NeighborhoodType::Swap,
                 sampling_size: 5000,
                 max_iterations: 1000,
-                max_time_secs: 30, // 30 segundos para buscas locais por padrão
+                max_time_secs: 30,
             },
         }
     }
+}
+
+impl SolverConfig {
 
     pub fn adjust_for_data(&mut self, data: &ProblemData) {
         let n = data.orders.len() as f64;
@@ -272,7 +265,7 @@ impl SolverConfig {
     pub fn parse_strategy(&mut self, strategy_str: &str) -> (MetaheuristicType, ConstructiveType, LocalSearchType) {
         let parts: Vec<&str> = strategy_str.split('+').collect();
         
-        let meta_str = parts.get(0).unwrap_or(&"single");
+        let meta_str = parts.first().unwrap_or(&"single");
         let constr_str = parts.get(1).unwrap_or(&"order_static");
         let ls_str = parts.get(2).unwrap_or(&"none");
 
@@ -332,13 +325,13 @@ impl std::str::FromStr for ConstructiveType {
         let parts: Vec<&str> = s.split(':').collect();
         let name = *parts.first().unwrap_or(&"order_static");
         Ok(match name {
-            "order_static" | "os" => ConstructiveType::OrderStatic,
-            "order_adaptive" | "oa" => ConstructiveType::OrderAdaptive,
-            "order_random" | "or" => ConstructiveType::OrderRandom,
+            "order_static" | "os" | "static" => ConstructiveType::OrderStatic,
+            "order_adaptive" | "oa" | "adaptive" => ConstructiveType::OrderAdaptive,
+            "order_random" | "or" | "random" => ConstructiveType::OrderRandom,
             "aisle_static" | "as" => ConstructiveType::AisleStatic,
             "aisle_adaptive" | "aa" => ConstructiveType::AisleAdaptive,
             "aisle_random" | "ar" => ConstructiveType::AisleRandom,
-            "hybrid_random" | "hr" => ConstructiveType::Hybrid,
+            "hybrid_random" | "hr" | "hybrid" => ConstructiveType::Hybrid,
             "super_hybrid" | "sh" => {
                 let p_zero = parts.get(1).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.10);
                 ConstructiveType::SuperHybrid { p_zero_alpha: p_zero }
@@ -369,7 +362,7 @@ impl MetaheuristicType {
         let dim = if m_name.starts_with("a_") { SearchDimension::Aisles } else { SearchDimension::Orders };
 
         match m_name {
-            "grasp" | "a_grasp" => MetaheuristicType::Grasp { 
+            "grasp" | "a_grasp" | "h_grasp" | "hybrid_grasp" => MetaheuristicType::Grasp { 
                 iterations: m_val1.map(|v| v as usize).unwrap_or(config.meta.grasp.iterations) 
             },
             "ils" | "a_ils" => MetaheuristicType::Ils { 

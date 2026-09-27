@@ -9,10 +9,10 @@ MAX_RUNNING_TIME = "600s"
 BINARY_NAME = "spo-ml-rust"
 # Showcase heuristics for "all" mode
 ALL_HEURISTICS = [
-    "single+static+none", 
-    "single+adaptive+none", 
-    "single+static+vnd", 
-    "grasp+random+vnd",
+    "single+order_static+none", 
+    "single+order_adaptive+none", 
+    "single+order_static+vnd", 
+    "grasp+order_random+vnd",
     "ils+aisle_random+lahc"
 ]
 

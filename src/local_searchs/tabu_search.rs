@@ -90,11 +90,10 @@ impl LocalSearchAlgorithm for TabuSearch {
                 let abs_obj = evaluator.current_objective() + delta;
                 let aspirated = abs_obj > best_global_obj + 1e-6;
 
-                if !is_tabu || aspirated {
-                    if best_allowed.is_none() || delta > best_allowed.as_ref().unwrap().1 {
+                if (!is_tabu || aspirated)
+                    && (best_allowed.is_none() || delta > best_allowed.as_ref().unwrap().1) {
                         best_allowed = Some((mv, delta));
                     }
-                }
                 
                 if best_any.is_none() || delta > best_any.as_ref().unwrap().1 {
                     best_any = Some((mv, delta));

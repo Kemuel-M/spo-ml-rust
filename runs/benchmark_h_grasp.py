@@ -158,8 +158,8 @@ def run_benchmark():
             
             for constr in constructives_list:
                 for ls in ls_list:
-                    # Formato para GRASP: META:ITERS+CONSTR+LS
-                    strategy = f"{META_BASE}:{ITERATIONS}+{constr}+{ls}"
+                    # Formato para GRASP: META:ITERS::TIMEOUT+CONSTR+LS
+                    strategy = f"{META_BASE}:{ITERATIONS}::{TIMEOUT_LIMIT}+{constr}+{ls}"
                     
                     for run_idx in range(1, RUNS_PER_INSTANCE + 1):
                         current_seed = str(int(SEED) + run_idx) if SEED != "0" else "0"

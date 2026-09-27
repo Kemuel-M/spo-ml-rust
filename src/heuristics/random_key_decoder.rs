@@ -42,13 +42,11 @@ impl ConstructiveAlgorithm for RandomKeyDecoder {
             for &idx in &order_indices {
                 if curr_items >= data.wave_size_ub { break; }
                 
-                if let Some(thresh) = self.threshold {
-                    if scores[idx] < thresh { continue; }
-                }
+                if let Some(thresh) = self.threshold
+                    && scores[idx] < thresh { continue; }
 
-                if self.is_stochastic {
-                    if rng.random::<f64>() >= scores[idx] { continue; }
-                }
+                if self.is_stochastic
+                    && rng.random::<f64>() >= scores[idx] { continue; }
 
                 let total = data.order_total_items[idx];
                 if curr_items + total > data.wave_size_ub { continue; }
@@ -67,8 +65,8 @@ impl ConstructiveAlgorithm for RandomKeyDecoder {
                 }
                 utils::update_stock_dense(&data.dense_orders[idx], &data.item_to_aisles, &mut available_stock, &sol.aisles, data.n_items);
 
-                if self.threshold.is_none() {
-                    if curr_items >= data.wave_size_lb {
+                if self.threshold.is_none()
+                    && curr_items >= data.wave_size_lb {
                         let current_obj = curr_items as f64 / curr_aisles_count.max(1) as f64;
                         if current_obj > best_obj {
                             best_obj = current_obj;
@@ -78,7 +76,6 @@ impl ConstructiveAlgorithm for RandomKeyDecoder {
                             best_sol = Some(snap);
                         }
                     }
-                }
             }
 
             // Fallback (Rede de segurança): garante factibilidade (wave_size_lb) independente do threshold
@@ -137,13 +134,11 @@ impl ConstructiveAlgorithm for RandomKeyDecoder {
             for &aid in &aisle_indices {
                 if total_items >= data.wave_size_ub { break; }
                 
-                if let Some(thresh) = self.threshold {
-                    if scores[aid] < thresh { continue; }
-                }
+                if let Some(thresh) = self.threshold
+                    && scores[aid] < thresh { continue; }
 
-                if self.is_stochastic {
-                    if rng.random::<f64>() >= scores[aid] { continue; }
-                }
+                if self.is_stochastic
+                    && rng.random::<f64>() >= scores[aid] { continue; }
 
                 sol.aisles.insert(aid);
                 curr_aisles_count += 1;
@@ -172,8 +167,8 @@ impl ConstructiveAlgorithm for RandomKeyDecoder {
                     }
                 }
 
-                if self.threshold.is_none() {
-                    if total_items >= data.wave_size_lb {
+                if self.threshold.is_none()
+                    && total_items >= data.wave_size_lb {
                         let current_obj = total_items as f64 / curr_aisles_count.max(1) as f64;
                         if current_obj > best_obj {
                             best_obj = current_obj;
@@ -183,7 +178,6 @@ impl ConstructiveAlgorithm for RandomKeyDecoder {
                             best_sol = Some(snap);
                         }
                     }
-                }
             }
             
             // Fallback (Rede de segurança): garante factibilidade (wave_size_lb) independente do threshold

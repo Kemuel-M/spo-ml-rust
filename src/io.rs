@@ -101,11 +101,13 @@ pub fn read_input(file_path: &str, deterministic: bool) -> Result<ProblemData> {
     }
 
     use std::sync::Arc;
-    let mut order_required_aisles = Vec::with_capacity(n_orders);
-    for o_idx in 0..n_orders {
-        let req = compute_order_req(o_idx, n_items, &dense_orders[o_idx], &stock_matrix, &item_locations_bits, deterministic);
-        order_required_aisles.push(req);
-    }
+    let order_required_aisles: Vec<Vec<usize>> = dense_orders
+        .iter()
+        .enumerate()
+        .map(|(o_idx, order_items)| {
+            compute_order_req(o_idx, n_items, order_items, &stock_matrix, &item_locations_bits, deterministic)
+        })
+        .collect();
 
     let mut aisle_to_orders_req = vec![Vec::new(); n_aisles];
     for (o_idx, req) in order_required_aisles.iter().enumerate() {

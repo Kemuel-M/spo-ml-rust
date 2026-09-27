@@ -103,24 +103,22 @@ impl SolverStrategy for BPSO {
 
             let w = self.config.w_max - (self.config.w_max - self.config.w_min) * (iter as f64 / self.config.iterations as f64);
             
-            // --- INÍCIO: AR-BPSO (Adaptive Reactive) ---
-            // Calcula o quão estagnado o algoritmo está (de 0.0 a 1.0)
+            // Adaptive Reactive Stagnation Control
             let stag_ratio = stagnation_count as f64 / self.config.stagnation_limit as f64;
             
-            // Estágio 1 de Defesa: Alteração Psicológica (A partir de 30% de estagnação)
+            // Acceleration coefficients adaptation based on stagnation ratio
             let (current_c1, current_c2) = if stag_ratio > self.config.stag_threshold_escape {
-                (self.config.c1_escape, self.config.c2_escape) // Modo Fuga (Enxame Teimoso e Explorador)
+                (self.config.c1_escape, self.config.c2_escape) // Exploration mode
             } else {
-                (self.config.c1, self.config.c2) // Modo Harmonia (1.494 - Convergência Rápida)
+                (self.config.c1, self.config.c2) // Convergence mode
             };
 
-            // Estágio 2 de Defesa: Caos Dinâmico e Busca Local Reativa (A partir de 60% de estagnação)
+            // Turbulence and local search probability
             let (turbulence_chance, current_ls_prob) = if stag_ratio > self.config.stag_threshold_panic {
-                (self.config.turbulence_high, self.config.ls_prob_high) // Pânico
+                (self.config.turbulence_high, self.config.ls_prob_high) // High perturbation
             } else {
-                (self.config.turbulence_base, self.config.ls_prob) // Voo normal
+                (self.config.turbulence_base, self.config.ls_prob) // Base perturbation
             };
-            // --- FIM: AR-BPSO ---
 
             // Convert gbest_s to both dimensions for the swarm to follow
             // gbest_v_orders and gbest_v_aisles are updated at the end of the loop if improved
@@ -147,17 +145,14 @@ impl SolverStrategy for BPSO {
                 }
                 
                 if p.rng.random::<f64>() < turbulence_chance {
-                    for j in 0..n {
-                        scores[j] = p.rng.random::<f64>(); 
+                    for (j, score) in scores.iter_mut().enumerate().take(n) {
+                        *score = p.rng.random::<f64>(); 
                         p.velocity[j] = p.rng.random_range(-self.config.v_max..self.config.v_max);
                     }
                 }
                 
                 let seed_construct = p.rng.next_u64();
                 let t_start_const = Instant::now();
-                // --- CONFIGURAÇÃO DO RANDOM KEY DECODER ---
-                // MODO 1: BPSO Clássico Guiado (Comportamento do guided_construct original) - threshold: Some(0.5) -> Exige que a partícula aprove a inserção.
-                // MODO 2: Snapshot & Fallback (Ignora magnitudes, foca apenas no Rank) - threshold: None -> Salva o pico ótimo de densidade (desliga os cortes do BPSO).
                 let decoder = RandomKeyDecoder {
                     is_stochastic: false,
                     threshold: Some(0.5),

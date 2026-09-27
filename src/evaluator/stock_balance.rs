@@ -203,13 +203,10 @@ impl Evaluator for StockBalanceEvaluator {
         match *mv {
             Move::OrderInsertion(i) => if self.total_items + data.order_total_items[i] > self.wave_size_ub { return false; },
             Move::OrderSwap(o, i) => if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub { return false; },
-            Move::OrderRemoval(o) => if self.total_items < data.order_total_items[o] + self.wave_size_lb { return false; },
+            Move::OrderRemoval(o) if self.total_items < data.order_total_items[o] + self.wave_size_lb => { return false; },
             _ => {}
         }
-        match *mv {
-            Move::OrderSwap(o, i) => { if self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return false; } },
-            _ => {}
-        }
+        if let Move::OrderSwap(o, i) = *mv && self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return false; }
         
         match *mv {
             Move::OrderSwap(o, i) => self.try_apply_order_swap(o, i, data),
@@ -228,13 +225,10 @@ impl Evaluator for StockBalanceEvaluator {
         match *mv {
             Move::OrderInsertion(i) => if self.total_items + data.order_total_items[i] > self.wave_size_ub { return None; },
             Move::OrderSwap(o, i) => if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub { return None; },
-            Move::OrderRemoval(o) => if self.total_items < data.order_total_items[o] + self.wave_size_lb { return None; },
+            Move::OrderRemoval(o) if self.total_items < data.order_total_items[o] + self.wave_size_lb => { return None; },
             _ => {}
         }
-        match *mv {
-            Move::OrderSwap(o, i) => { if self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return None; } },
-            _ => {}
-        }
+        if let Move::OrderSwap(o, i) = *mv && self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return None; }
 
         match *mv {
             Move::OrderSwap(o, i) => self.try_apply_order_swap(o, i, data),
@@ -256,13 +250,10 @@ impl Evaluator for StockBalanceEvaluator {
         match *mv {
             Move::OrderInsertion(i) => if self.total_items + data.order_total_items[i] > self.wave_size_ub { return false; },
             Move::OrderSwap(o, i) => if self.total_items - data.order_total_items[o] + data.order_total_items[i] > self.wave_size_ub { return false; },
-            Move::OrderRemoval(o) => if self.total_items < data.order_total_items[o] + self.wave_size_lb { return false; },
+            Move::OrderRemoval(o) if self.total_items < data.order_total_items[o] + self.wave_size_lb => { return false; },
             _ => {}
         }
-        match *mv {
-            Move::OrderSwap(o, i) => { if self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return false; } },
-            _ => {}
-        }
+        if let Move::OrderSwap(o, i) = *mv && self.total_items - data.order_total_items[o] + data.order_total_items[i] < self.wave_size_lb { return false; }
 
         match *mv {
             Move::OrderSwap(o, i) => self.try_apply_order_swap(o, i, data),

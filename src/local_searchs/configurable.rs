@@ -119,16 +119,14 @@ impl ConfigurableLocalSearch {
             .filter_map(|x| x)
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        if let Some((mv, best_obj)) = best_move_found {
-            if best_obj > current_obj + 1e-6 {
-                if evaluator.test_and_apply_move(&mv, data, current_obj) {
+        if let Some((mv, best_obj)) = best_move_found
+            && best_obj > current_obj + 1e-6
+                && evaluator.test_and_apply_move(&mv, data, current_obj) {
                     solution.orders = evaluator.get_active_orders();
                     solution.aisles = evaluator.get_active_aisles();
                     solution.score = evaluator.current_objective();
                     return true;
                 }
-            }
-        }
         false
     }
 }

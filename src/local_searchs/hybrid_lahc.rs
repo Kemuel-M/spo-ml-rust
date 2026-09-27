@@ -14,13 +14,12 @@ pub struct HybridLAHC {
 
 impl HybridLAHC {
     pub fn new(config: LocalSearchConfig, list_size: usize) -> Self {
-        let mut neighborhoods: Vec<(SearchDimension, Box<dyn crate::local_searchs::neighborhood::Neighborhood>)> = Vec::new();
-        
-        // Add neighborhoods for both dimensions
-        neighborhoods.push((SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion)));
-        neighborhoods.push((SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap)));
-        neighborhoods.push((SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal)));
-        neighborhoods.push((SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap)));
+        let neighborhoods: Vec<(SearchDimension, Box<dyn crate::local_searchs::neighborhood::Neighborhood>)> = vec![
+            (SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion)),
+            (SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap)),
+            (SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal)),
+            (SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap)),
+        ];
         
         Self {
             config,

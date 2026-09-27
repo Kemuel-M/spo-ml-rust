@@ -18,17 +18,24 @@ struct Candidate {
 }
 
 impl PartialEq for Candidate {
-    fn eq(&self, other: &Self) -> bool { self.id == other.id }
-}
-impl Eq for Candidate {}
-impl PartialOrd for Candidate {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.score.partial_cmp(&other.score)
+    fn eq(&self, other: &Self) -> bool {
+        self.score.to_bits() == other.score.to_bits() && self.id == other.id
     }
 }
+impl Eq for Candidate {}
+
 impl Ord for Candidate {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+        self.score
+            .partial_cmp(&other.score)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| self.id.cmp(&other.id))
+    }
+}
+
+impl PartialOrd for Candidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -209,8 +216,8 @@ mod tests {
         let orders_sorted_by_size = vec![1, 0];
 
         let mut stock_matrix = vec![0; n_aisles * n_items];
-        stock_matrix[0 * n_items + 0] = 10;
-        stock_matrix[1 * n_items + 1] = 10;
+        stock_matrix[0] = 10;
+        stock_matrix[n_items + 1] = 10;
 
         let mut item_locations_bits = vec![FixedBitSet::with_capacity(n_aisles); n_items];
         item_locations_bits[0].insert(0);

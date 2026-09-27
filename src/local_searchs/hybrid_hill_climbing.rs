@@ -10,13 +10,12 @@ pub struct HybridHillClimbing {
 
 impl HybridHillClimbing {
     pub fn new(config: LocalSearchConfig) -> Self {
-        let mut neighborhoods: Vec<(SearchDimension, Box<dyn crate::local_searchs::neighborhood::Neighborhood>)> = Vec::new();
-        
-        // Add neighborhoods for both dimensions
-        neighborhoods.push((SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion)));
-        neighborhoods.push((SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap)));
-        neighborhoods.push((SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal)));
-        neighborhoods.push((SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap)));
+        let neighborhoods: Vec<(SearchDimension, Box<dyn crate::local_searchs::neighborhood::Neighborhood>)> = vec![
+            (SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion)),
+            (SearchDimension::Orders, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap)),
+            (SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal)),
+            (SearchDimension::Aisles, crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap)),
+        ];
         
         Self {
             config,
@@ -27,7 +26,7 @@ impl HybridHillClimbing {
 
 impl LocalSearchAlgorithm for HybridHillClimbing {
     fn name(&self) -> String {
-        format!("HHC [Union Best Improvement]")
+        "HHC [Union Best Improvement]".to_string()
     }
 
     fn refine(&self, solution: &mut ChallengeSolution, data: &ProblemData, _seed: u64) -> bool {
@@ -86,8 +85,8 @@ impl LocalSearchAlgorithm for HybridHillClimbing {
                 .filter_map(|x| x)
                 .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-            if let Some((mv, best_obj)) = best_move_found {
-                if best_obj > current_obj + 1e-6 {
+            if let Some((mv, best_obj)) = best_move_found
+                && best_obj > current_obj + 1e-6 {
                     // Apply move
                     match mv {
                         Move::OrderSwap(o, i) => evaluator.try_apply_order_swap(o, i, data),
@@ -110,7 +109,6 @@ impl LocalSearchAlgorithm for HybridHillClimbing {
                         evaluator.rollback();
                     }
                 }
-            }
         }
 
         if evaluator.current_objective() < initial_obj - 1e-6 {

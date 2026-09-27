@@ -148,8 +148,7 @@ mod tests {
         stock.add_aisle_dense(0, &data);
         let pre_order_balance = stock.balance.clone();
 
-        // Add order 0 (simulating fulfillment, stock balance increases mathematically, but usually orders REMOVE stock in our logic)
-        // Wait, remove_order_sparse reduces balance. add_order_sparse increases balance.
+        // Remove order 0 (fulfillment consumes stock balance)
         stock.remove_order_sparse(0, &data);
 
         // Some stock should be reduced

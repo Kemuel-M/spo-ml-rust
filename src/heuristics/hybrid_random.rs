@@ -43,7 +43,8 @@ impl ConstructiveAlgorithm for HybridRandom {
     fn construct(&self, data: &ProblemData, seed: u64, _weights: Option<(&[f64], crate::local_searchs::SearchDimension)>) -> ChallengeSolution {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         
-        let sol = if rng.random_bool(self.p_orders) {
+        
+        if rng.random_bool(self.p_orders) {
             let mut s = self.order_strategy.construct(data, seed, None);
             s.metadata.insert("strategy".to_string(), "orders".to_string());
             s
@@ -51,7 +52,6 @@ impl ConstructiveAlgorithm for HybridRandom {
             let mut s = self.aisle_strategy.construct(data, seed, None);
             s.metadata.insert("strategy".to_string(), "aisles".to_string());
             s
-        };
-        sol
+        }
     }
 }

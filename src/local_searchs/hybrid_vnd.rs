@@ -9,11 +9,9 @@ pub struct HybridVND {
     pub max_time_secs: u64,
 }
 
-impl HybridVND {
+impl Default for HybridVND {
     /// Cria um VND híbrido que alterna entre vizinhanças de Pedidos e Corredores
-    pub fn default() -> Self {
-        let mut nbh = Vec::new();
-        
+    fn default() -> Self {
         let orders_config = LocalSearchConfig {
             dimension: SearchDimension::Orders,
             strategy: SearchStrategy::FirstImprovement,
@@ -33,24 +31,26 @@ impl HybridVND {
         };
 
         // Ordem sugerida: Inserção Pedidos -> Troca Pedidos -> Remoção Corredores -> Troca Corredores
-        nbh.push(ConfigurableLocalSearch { 
-            config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..orders_config.clone() },
-            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion),
-        });
-        nbh.push(ConfigurableLocalSearch { 
-            config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..orders_config.clone() },
-            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap),
-        });
-        nbh.push(ConfigurableLocalSearch { 
-            config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..aisles_config.clone() },
-            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal),
-        });
-        nbh.push(ConfigurableLocalSearch { 
-            config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..aisles_config.clone() },
-            neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap),
-        });
+        let neighborhoods = vec![
+            ConfigurableLocalSearch { 
+                config: LocalSearchConfig { neighborhood: NeighborhoodType::Insertion, ..orders_config.clone() },
+                neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Insertion),
+            },
+            ConfigurableLocalSearch { 
+                config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..orders_config },
+                neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Orders, NeighborhoodType::Swap),
+            },
+            ConfigurableLocalSearch { 
+                config: LocalSearchConfig { neighborhood: NeighborhoodType::Removal, ..aisles_config.clone() },
+                neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Removal),
+            },
+            ConfigurableLocalSearch { 
+                config: LocalSearchConfig { neighborhood: NeighborhoodType::Swap, ..aisles_config },
+                neighborhood_engine: crate::local_searchs::neighborhood::build_neighborhood(SearchDimension::Aisles, NeighborhoodType::Swap),
+            },
+        ];
 
-        Self { neighborhoods: nbh, max_time_secs: 150 }
+        Self { neighborhoods, max_time_secs: 150 }
     }
 }
 
@@ -118,8 +118,10 @@ mod tests {
         let mut sol = create_initial_solution(&data);
         let initial_score = sol.score;
 
-        let mut hvnd = HybridVND::default();
-        hvnd.max_time_secs = 2; // Limite baixo para o teste nao demorar eternamente se houver infinitos updates
+        let hvnd = HybridVND {
+            max_time_secs: 2,
+            ..Default::default()
+        };
         
         let start = Instant::now();
         let improved = hvnd.refine(&mut sol, &data, 42);
